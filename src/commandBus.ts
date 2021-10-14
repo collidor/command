@@ -1,11 +1,12 @@
 import { Observable } from 'rxjs'
 
-import { COMMAND_HANDLER_METADATA, ResultType } from './constants'
+import { COMMAND_CONTEXT, COMMAND_HANDLER_METADATA, ResultType } from './constants'
 import { InvalidQueueHandlerException } from './exceptions/invalidCommandHandler.exception'
 import { getConstructor, isFunction } from './helpers'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
 import { IType } from './interfaces/type.interface'
 import { CommandType } from './models/command'
+import { CommandContext } from './models/context'
 
 export type HandlerType = IType<ICommandHandler>
 
@@ -59,6 +60,16 @@ export class CommandBus {
      */
     public execute<T extends CommandType = CommandType>(command: T): T[ResultType] {
         const constructor = getConstructor(command as any)
+
+        const context = command[COMMAND_CONTEXT] || new CommandContext()
+        context.commands.add(command)
+
+        context.execute = <T2 extends CommandType = CommandType>(command2: T2): T2[ResultType] => {
+            command2[COMMAND_CONTEXT] = context
+            return this.execute(command2)
+        }
+
+        command[COMMAND_CONTEXT] = context
         return this.executeByName<T>(constructor.name, command)
     }
 
@@ -76,7 +87,7 @@ export class CommandBus {
         }
 
         try {
-            const result = handler.execute(data)
+            const result = handler.execute(data, data[COMMAND_CONTEXT])
 
             if (isFunction((result as Observable<any>)?.subscribe)) {
                 return result as Observable<any>

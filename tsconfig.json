@@ -7,26 +7,16 @@
         "experimentalDecorators": true,
         "allowSyntheticDefaultImports": true,
         "target": "es2017",
+        "lib": ["ESNext"],
         "sourceMap": true,
         "outDir": "./dist",
         "baseUrl": "./",
         "rootDir": "./src",
         "incremental": true,
         "resolveJsonModule": true,
-        "types": [
-            "reflect-metadata",
-            "jest"
-        ],
-        "typeRoots": [
-            "./types",
-            "./node_modules/@types"
-        ]
+        "types": ["reflect-metadata", "jest", "node"],
+        "typeRoots": ["./types", "./node_modules/@types"]
     },
-    "exclude": [
-        "node_modules"
-    ],
-    "include": [
-        "./src/**/*.tsx",
-        "./src/**/*.ts",
-    ]
+    "exclude": ["node_modules"],
+    "include": ["./src/**/*.tsx", "./src/**/*.ts"]
 }
