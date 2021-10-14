@@ -1,7 +1,7 @@
 import { CommandBus } from '../commandBus'
 import { COMMAND_HANDLER_METADATA } from '../constants'
 import { IType } from '../interfaces/type.interface'
-import { CommandType } from '../models/comand'
+import { CommandType } from '../models/command'
 
 export const CommandHandler = (bus: CommandBus, command: IType<CommandType>): ClassDecorator => {
     return (target: any): void => {

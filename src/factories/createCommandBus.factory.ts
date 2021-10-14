@@ -1,7 +1,7 @@
 import { CommandBus } from '../commandBus'
 import { CommandHandler } from '../decorators/commandHandler.decorator'
 import { IType } from '../interfaces/type.interface'
-import { CommandType } from '../models/comand'
+import { CommandType } from '../models/command'
 
 export function createCommandBus(name = 'command'): {
     CommandHandler: (command: IType<CommandType>) => ClassDecorator

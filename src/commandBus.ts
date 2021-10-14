@@ -5,7 +5,7 @@ import { InvalidQueueHandlerException } from './exceptions/invalidCommandHandler
 import { getConstructor, isFunction } from './helpers'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
 import { IType } from './interfaces/type.interface'
-import { CommandType } from './models/comand'
+import { CommandType } from './models/command'
 
 export type HandlerType = IType<ICommandHandler>
 

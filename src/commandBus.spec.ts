@@ -4,7 +4,7 @@ import { interval, Observable } from 'rxjs'
 
 import { createCommandBus } from './factories/createCommandBus.factory'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
-import { ObservableCommand } from './models/comand'
+import { ObservableCommand } from './models/command'
 
 describe('CommandBus', () => {
     const { bus, CommandHandler } = createCommandBus()
