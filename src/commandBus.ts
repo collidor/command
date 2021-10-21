@@ -5,7 +5,7 @@ import { InvalidQueueHandlerException } from './exceptions/invalidCommandHandler
 import { getConstructor, isFunction } from './helpers'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
 import { IType } from './interfaces/type.interface'
-import { CommandType } from './models/command'
+import { CommandType, UndoableResult } from './models/command'
 import { CommandContext } from './models/context'
 
 export type HandlerType = IType<ICommandHandler>
@@ -31,26 +31,43 @@ export class CommandBus {
      * Registers the handler so it's intance execute function can
      * be called later by the bus
      */
-    public registerHandler(handler: ICommandHandler): void {
-        const constructor = getConstructor(handler)
+    public registerHandlerInstance(handlerInstance: ICommandHandler): void {
+        const constructor = getConstructor(handlerInstance)
 
         const target: { data: IType<CommandType>; bus: CommandBus } = Reflect.getMetadata(
             COMMAND_HANDLER_METADATA,
-            getConstructor(handler),
+            getConstructor(handlerInstance),
         )
 
         if (!target) {
             throw new InvalidQueueHandlerException(constructor.name, this.name)
         }
 
-        this.bind(handler, target.data.name)
+        this.bind(handlerInstance, target.data.name)
     }
 
     /**
      * Registers all the handlers
      */
-    public registerHandlers(handlers: ICommandHandler[] = []): void {
-        handlers.forEach((handler) => this.registerHandler(handler))
+    public registerHandlersInstances(handlersInstances: ICommandHandler[] = []): void {
+        handlersInstances.forEach((handler) => this.registerHandlerInstance(handler))
+    }
+
+    /**
+     * Registers the handler so it's intance execute function can
+     * be called later by the bus
+     */
+    public registerHandlerFactory([Handler, args]: [IType<ICommandHandler>, any[]]): void {
+        return this.registerHandlerInstance(new Handler(...args))
+    }
+
+    /**
+     * Registers all the handlers
+     */
+    public registerHandlersFactories(
+        handlersFactories: Array<[IType<ICommandHandler>, any[]]> = [],
+    ): void {
+        handlersFactories.forEach((handlerFactory) => this.registerHandlerFactory(handlerFactory))
     }
 
     // EXECUTION
@@ -79,7 +96,7 @@ export class CommandBus {
     protected executeByName<T extends CommandType = CommandType>(
         commandName: string,
         data: T,
-    ): T[ResultType] extends Observable<infer O> ? Observable<O> : T[ResultType] {
+    ): T[ResultType] {
         const handler: ICommandHandler = this.handlers.get(commandName)
 
         if (!handler) {
@@ -91,6 +108,14 @@ export class CommandBus {
 
             if (isFunction((result as Observable<any>)?.subscribe)) {
                 return result as Observable<any>
+            } else if ((result as UndoableResult<any>).value) {
+                if (
+                    isFunction(
+                        ((result as UndoableResult<any>).value as Observable<any>)?.subscribe,
+                    )
+                ) {
+                    return result as T[ResultType]
+                }
             }
 
             return Promise.resolve(result) as T[ResultType] extends Observable<infer O>

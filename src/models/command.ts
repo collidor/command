@@ -10,10 +10,25 @@ export class BaseCommand<T = any> {
     public [COMMAND_CONTEXT]?: CommandContext
 }
 
+export type UndoableResult<T = any, Q = any> = {
+    value: T
+    undo?: () => Promise<Q>
+}
+
 /** A command which will return a promise with the result*/
 export class Command<T> extends BaseCommand<Promise<T>> {}
+
+export class UndoableCommand<T, Q = any> extends BaseCommand<UndoableResult<Promise<T>, Q>> {}
 
 /** A command which will return an observable with the results sent over time */
 export class ObservableCommand<T> extends BaseCommand<Observable<T>> {}
 
-export type CommandType<T = any> = Command<T> | ObservableCommand<T> | BaseCommand<T>
+export class UndoableObservableCommand<T, Q = any> extends BaseCommand<
+    UndoableResult<Observable<T>, Q>
+> {}
+
+export type CommandType<T = any> =
+    | Command<T>
+    | ObservableCommand<T>
+    | UndoableCommand<T>
+    | UndoableObservableCommand<T>

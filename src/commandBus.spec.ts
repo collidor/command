@@ -1,10 +1,10 @@
 import 'reflect-metadata'
 
-import { interval, Observable, take } from 'rxjs'
+import { interval, mergeMap, Observable, take } from 'rxjs'
 
 import { createCommandBus } from './factories/createCommandBus.factory'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
-import { ObservableCommand } from './models/command'
+import { ObservableCommand, UndoableObservableCommand, UndoableResult } from './models/command'
 import { CommandContext } from './models/context'
 
 describe('CommandBus', () => {
@@ -17,6 +17,12 @@ describe('CommandBus', () => {
     }
 
     class TheCommand2 extends ObservableCommand<number> {
+        constructor(public s: string) {
+            super()
+        }
+    }
+
+    class TheUndoableCommand2 extends UndoableObservableCommand<number> {
         constructor(public s: string) {
             super()
         }
@@ -36,16 +42,39 @@ describe('CommandBus', () => {
         }
     }
 
+    const a = []
+
+    @CommandHandler(TheUndoableCommand2)
+    class TheUndoableCommandHandler2 implements ICommandHandler<TheUndoableCommand2> {
+        public execute(c: TheUndoableCommand2): UndoableResult<Observable<number>> {
+            a.push(c.s)
+            return {
+                value: interval(2000),
+                async undo(): Promise<any> {
+                    a.pop()
+                },
+            }
+        }
+    }
+
     test('test', (done) => {
         expect(1).toBe(1)
 
-        bus.registerHandler(new TheCommandHandler())
-        bus.registerHandler(new TheCommandHandler2())
+        bus.registerHandlerInstance(new TheCommandHandler())
+        bus.registerHandlerInstance(new TheCommandHandler2())
+        bus.registerHandlerInstance(new TheUndoableCommandHandler2())
 
-        bus.execute(new TheCommand('s'))
-            .pipe(take(1))
-            .subscribe((n) => {
-                console.log(n)
+        const c = bus.execute(new TheUndoableCommand2('s'))
+        c.value
+            .pipe(
+                take(1),
+                mergeMap(() => {
+                    expect(a).toHaveLength(1)
+                    return c.undo()
+                }),
+            )
+            .subscribe(() => {
+                expect(a).toHaveLength(0)
                 done()
             })
     })
