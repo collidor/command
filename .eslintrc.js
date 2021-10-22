@@ -49,21 +49,6 @@ module.exports = {
                 default: 'array-simple',
             },
         ],
-        'sort-class-members/sort-class-members': [
-            1,
-            {
-                order: [
-                    '[static-properties]',
-                    '[conventional-private-properties]',
-                    '[properties]',
-                    'constructor',
-                    '[static-methods]',
-                    '[conventional-private-methods]',
-                    '[methods]',
-                ],
-                accessorPairPositioning: 'getThenSet',
-            },
-        ],
         'simple-import-sort/imports': 'error',
     },
     parserOptions: {

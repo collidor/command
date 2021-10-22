@@ -1,6 +1,6 @@
 import { Observable } from 'rxjs'
 
-import { COMMAND_CONTEXT, COMMAND_HANDLER_METADATA, ResultType } from './constants'
+import { COMMAND_CONTEXT, COMMAND_HANDLER_METADATA, EVENTS, ResultType } from './constants'
 import { InvalidQueueHandlerException } from './exceptions/invalidCommandHandler.exception'
 import { getConstructor, isFunction } from './helpers'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
@@ -10,10 +10,10 @@ import { CommandContext } from './models/context'
 
 export type HandlerType = IType<ICommandHandler>
 
-export class CommandBus {
+export abstract class CommandBus {
     protected handlers = new Map<string, ICommandHandler>()
 
-    constructor(public name: string = 'command') {}
+    constructor(public name: string, public plugins: any) {}
 
     // HANDLERS
 
@@ -32,7 +32,11 @@ export class CommandBus {
      * be called later by the bus
      */
     public registerHandlerInstance(handlerInstance: ICommandHandler): void {
-        const constructor = getConstructor(handlerInstance)
+        const handler =
+            this.plugins?.getPlugins(EVENTS.BEFORE_REGISTER_HANDLER)?.(handlerInstance) ||
+            handlerInstance
+
+        const constructor = getConstructor(handler)
 
         const target: { data: IType<CommandType>; bus: CommandBus } = Reflect.getMetadata(
             COMMAND_HANDLER_METADATA,
@@ -43,7 +47,12 @@ export class CommandBus {
             throw new InvalidQueueHandlerException(constructor.name, this.name)
         }
 
-        this.bind(handlerInstance, target.data.name)
+        if (target.bus !== Object.getPrototypeOf(this).constructor) {
+            return
+        }
+
+        this.bind(handler, target.data.name)
+        this.plugins?.getPlugins(EVENTS.BEFORE_REGISTER_HANDLER)?.(handler, target.data.name)
     }
 
     /**
