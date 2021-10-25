@@ -1,6 +1,7 @@
 import { Observable } from 'rxjs'
+import { Options } from '.'
 
-import { COMMAND_CONTEXT, COMMAND_HANDLER_METADATA, EVENTS, ResultType } from './constants'
+import { COMMAND_CONTEXT, COMMAND_HANDLER_METADATA, HANDLERS, ResultType } from './constants'
 import { InvalidQueueHandlerException } from './exceptions/invalidCommandHandler.exception'
 import { getConstructor, isFunction } from './helpers'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
@@ -10,7 +11,7 @@ import { CommandContext } from './models/context'
 
 export type HandlerType = IType<ICommandHandler>
 
-export abstract class CommandBusBase {
+export abstract class CommandBusBase<O extends Options = Options> {
     protected handlers = new Map<string, ICommandHandler>()
 
     constructor(public name: string, public plugins?: any) {}
@@ -33,7 +34,7 @@ export abstract class CommandBusBase {
      */
     public registerHandlerInstance(handlerInstance: ICommandHandler): void {
         const handler =
-            this.plugins?.getPlugins(EVENTS.BEFORE_REGISTER_HANDLER)?.(handlerInstance) ||
+            this.plugins?.getPlugins(HANDLERS.BEFORE_REGISTER_HANDLER)?.(handlerInstance) ||
             handlerInstance
 
         const constructor = getConstructor(handler)
@@ -52,7 +53,7 @@ export abstract class CommandBusBase {
         }
 
         this.bindHandler(handler, target.data.name)
-        this.plugins?.getPlugins(EVENTS.BEFORE_REGISTER_HANDLER)?.(handler, target.data.name)
+        this.plugins?.getPlugins(HANDLERS.BEFORE_REGISTER_HANDLER)?.(handler, target.data.name)
     }
 
     /**
@@ -67,19 +68,19 @@ export abstract class CommandBusBase {
     /**
      * Executes the command
      */
-    public execute<T extends CommandType = CommandType>(command: T): T[ResultType] {
+    public execute<T extends CommandType = CommandType, ExecuteOptions extends O = O>(command: T, options?:  ExecuteOptions ): T[ResultType] {
         const constructor = getConstructor(command as any)
 
-        const context = command[COMMAND_CONTEXT] || new CommandContext()
+        const context:CommandContext = Reflect.getMetadata(COMMAND_CONTEXT, command) || new CommandContext<ExecuteOptions>()
         context.commands.add(command)
 
-        context.execute = <T2 extends CommandType = CommandType>(command2: T2): T2[ResultType] => {
-            command2[COMMAND_CONTEXT] = context
-            return this.execute(command2)
-        }
+        context.execute = (<T2 extends CommandType = CommandType, OptionsContext extends ExecuteOptions = ExecuteOptions>(command2: T2, optionsContext?: OptionsContext): T2[ResultType] => {
+            Reflect.defineMetadata(COMMAND_CONTEXT, context, command)
+            return this.execute<T2, OptionsContext>(command2, optionsContext)
+        }) as CommandContext<ExecuteOptions>['execute']
 
-        command[COMMAND_CONTEXT] = context
-        return this.executeByName<T>(constructor.name, command)
+        Reflect.defineMetadata(COMMAND_CONTEXT, context, command)
+        return this.executeByName<T>(constructor.name, command, options)
     }
 
     /**
@@ -88,16 +89,28 @@ export abstract class CommandBusBase {
     protected executeByName<T extends CommandType = CommandType>(
         commandName: string,
         data: T,
+        options?: O
     ): T[ResultType] {
+
+        const context = Reflect.getMetadata(COMMAND_CONTEXT, data)
         const handler: ICommandHandler = this.handlers.get(commandName)
 
+        const d = this.plugins?.getPlugins(HANDLERS.BEFORE_EXECUTE_HANDLER)?.(data, commandName, handler, context, options) || data
+
         if (!handler) {
-            throw new InvalidQueueHandlerException(commandName)
+            const pluginErrorHook = this.plugins?.getPlugins(HANDLERS.BEFORE_EXECUTE_HANDLER)
+            if(pluginErrorHook) {
+                return pluginErrorHook(d, commandName, handler, options)
+            } else {
+                throw new InvalidQueueHandlerException(commandName)
+            }
         }
 
         try {
-            const result = handler.execute(data, data[COMMAND_CONTEXT])
 
+            const result = (this.plugins?.getPlugins(HANDLERS.INTERCEPT_EXECUTION_HANDLER)?.(commandName, handler, options, handler.execute) || handler.execute)(d, context)
+
+            this.plugins?.getPlugins(HANDLERS.AFTER_EXECUTE_HANDLER)?.(data, commandName, handler, context, options, result)
             if (isFunction((result as Observable<any>)?.subscribe)) {
                 return result as Observable<any>
             } else if ((result as UndoableResult<any>).value) {

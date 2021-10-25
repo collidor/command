@@ -1,13 +1,11 @@
 import { Observable } from 'rxjs'
 
-import { COMMAND_CONTEXT, RESULT_TYPE } from '../constants'
-import { CommandContext } from './context'
+import { RESULT_TYPE } from '../constants'
 
 /** Base command */
 export abstract class BaseCommand<T = any> {
     /** Symbol that stores the resulting type */
     public [RESULT_TYPE]: T
-    public [COMMAND_CONTEXT]?: CommandContext
 }
 
 export type UndoableResult<T = any, Q = any> = {

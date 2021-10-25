@@ -6,9 +6,16 @@ export type ResultType = typeof RESULT_TYPE
 export const COMMAND_CONTEXT = Symbol('command context type')
 export type CommandContextType = typeof COMMAND_CONTEXT
 
-export const EVENTS = {
+export const HANDLERS = {
     BEFORE_REGISTER_HANDLER: Symbol(),
     AFTER_REGISTER_HANDLER: Symbol(),
+
+    BEFORE_EXECUTE_HANDLER: Symbol(),
+    AFTER_EXECUTE_HANDLER: Symbol(),
+
+    INTERCEPT_EXECUTION_HANDLER: Symbol(),
+
+    ON_INVALID_QUEUE_HANDLER_EXCEPTION: Symbol(),
 }
 
-Object.freeze(EVENTS)
+Object.freeze(HANDLERS)
