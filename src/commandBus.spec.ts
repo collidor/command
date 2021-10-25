@@ -8,7 +8,7 @@ import { ObservableCommand, UndoableObservableCommand, UndoableResult } from './
 import { CommandContext } from './models/context'
 
 describe('CommandBus', () => {
-    const { bus, CommandHandler } = createCommandBus()
+    const { commandBus: bus, CommandHandler } = createCommandBus()
 
     class TheCommand extends ObservableCommand<number> {
         constructor(public s: string) {

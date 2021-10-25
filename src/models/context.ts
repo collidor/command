@@ -1,6 +1,6 @@
-import { CommandBus, CommandType } from '..'
+import { CommandBusBase, CommandType } from '..'
 
 export class CommandContext {
-    public execute!: CommandBus['execute']
+    public execute!: CommandBusBase['execute']
     public commands: Set<CommandType> = new Set()
 }

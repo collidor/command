@@ -1,4 +1,4 @@
 export * from './factories'
-export * from './commandBus'
+export * from './commandBusBase'
 export * from './decorators'
 export * from './models'
