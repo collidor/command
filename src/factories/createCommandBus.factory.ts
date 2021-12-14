@@ -18,7 +18,7 @@ export function createCommandBus<T extends Capitalize<string>>(
     ) => ClassDecorator
 } {
     const ret = {
-        [name as `${T}`]: class extends CommandBusBase<CommandBusOptions> {},
+        [name as `${T}`]: class extends CommandBusBase {},
     }
     Reflect.defineMetadata(COMMAND_BUS_OPTIONS, options, ret[name])
     const bus = new ret[name]()

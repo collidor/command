@@ -4,9 +4,6 @@ export const COMMAND_BUS_OPTIONS = Symbol()
 export const RESULT_TYPE = Symbol('command result type')
 export type ResultType = typeof RESULT_TYPE
 
-export const COMMAND_CONTEXT = Symbol('command context type')
-export type CommandContextType = typeof COMMAND_CONTEXT
-
 export const HANDLERS = {
     BEFORE_REGISTER_HANDLER: Symbol(),
     AFTER_REGISTER_HANDLER: Symbol(),
