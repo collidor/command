@@ -12,7 +12,7 @@ export function createCommandBus<T extends Capitalize<string>>(
 ): {
     [key in `${Uncapitalize<T>}`]: CommandBusBase
 } & {
-    decorator: (
+    [key in `${T}Handler`]: (
         command: IType<CommandType>,
         resolver?: boolean | CommandBusOptions['injectionResolver'],
     ) => ClassDecorator
@@ -29,6 +29,6 @@ export function createCommandBus<T extends Capitalize<string>>(
 
     return {
         [uncapitalize(name)]: bus,
-        decorator,
+        [`${name}Handler`]: decorator,
     } as any
 }
