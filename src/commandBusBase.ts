@@ -1,7 +1,13 @@
 import { Observable } from 'rxjs'
 
 import { Options } from '.'
-import { COMMAND_CONTEXT, COMMAND_HANDLER_METADATA, HANDLERS, ResultType } from './constants'
+import {
+    COMMAND_BUS_OPTIONS,
+    COMMAND_CONTEXT,
+    COMMAND_HANDLER_METADATA,
+    HANDLERS,
+    ResultType,
+} from './constants'
 import { InvalidQueueHandlerException } from './exceptions/invalidCommandHandler.exception'
 import { getConstructor, isFunction } from './helpers'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
@@ -18,8 +24,10 @@ export abstract class CommandBusBase<O extends Options = Options> {
     protected name: string
     protected injectionResolver: CommandBusOptions['injectionResolver']
 
-    constructor(options: CommandBusOptions = {} as CommandBusOptions) {
-        const parsedOptions = new CommandBusOptions(options)
+    constructor(options?: CommandBusOptions) {
+        const parsedOptions = new CommandBusOptions(
+            options || Reflect.getMetadata(COMMAND_BUS_OPTIONS, this.constructor) || {},
+        )
         this.injectionResolver = parsedOptions.injectionResolver
         this.name = parsedOptions.name
         this.plugins = parsedOptions.plugins
