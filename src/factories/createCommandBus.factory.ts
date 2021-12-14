@@ -1,5 +1,5 @@
 import { CommandBusBase, CommandBusOptions, CommandHandler, CommandType } from '..'
-import { COMMAND_BUS_OPTIONS } from '../constants'
+import { COMMAND_BUS_OPTIONS, ResultType } from '../constants'
 import { IType } from '../interfaces/type.interface'
 
 function uncapitalize(str: string): string {
@@ -16,6 +16,8 @@ export function createCommandBus<T extends Capitalize<string>>(
         command: IType<CommandType>,
         resolver?: boolean | CommandBusOptions['injectionResolver'],
     ) => ClassDecorator
+} & {
+    bind<T extends CommandType>(command: IType<T>, handler: (command: T) => T[ResultType]): void
 } {
     const ret = {
         [name as `${T}`]: class extends CommandBusBase {},
@@ -30,5 +32,6 @@ export function createCommandBus<T extends Capitalize<string>>(
     return {
         [uncapitalize(name)]: bus,
         [`${name}Handler`]: decorator,
+        bind: bus.registerFunctionHandler.bind(bus),
     } as any
 }
