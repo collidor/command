@@ -12,7 +12,7 @@
         "outDir": "./dist",
         "baseUrl": "./",
         "rootDir": "./src",
-        "incremental": true,
+        "incremental": false,
         "resolveJsonModule": true,
         "types": ["reflect-metadata", "jest", "node"],
         "typeRoots": ["./types", "./node_modules/@types"]

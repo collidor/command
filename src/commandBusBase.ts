@@ -1,20 +1,29 @@
 import { Observable } from 'rxjs'
-import { Options } from '.'
 
+import { Options } from '.'
 import { COMMAND_CONTEXT, COMMAND_HANDLER_METADATA, HANDLERS, ResultType } from './constants'
 import { InvalidQueueHandlerException } from './exceptions/invalidCommandHandler.exception'
 import { getConstructor, isFunction } from './helpers'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
 import { IType } from './interfaces/type.interface'
 import { CommandType, UndoableResult } from './models/command'
+import { CommandBusOptions } from './models/commandBusOptions'
 import { CommandContext } from './models/context'
 
 export type HandlerType = IType<ICommandHandler>
 
 export abstract class CommandBusBase<O extends Options = Options> {
     protected handlers = new Map<string, ICommandHandler>()
+    protected plugins: any
+    protected name: string
+    protected injectionResolver: CommandBusOptions['injectionResolver']
 
-    constructor(public name: string, public plugins?: any) {}
+    constructor(options: CommandBusOptions = {} as CommandBusOptions) {
+        const parsedOptions = new CommandBusOptions(options)
+        this.injectionResolver = parsedOptions.injectionResolver
+        this.name = parsedOptions.name
+        this.plugins = parsedOptions.plugins
+    }
 
     // HANDLERS
 
@@ -63,18 +72,55 @@ export abstract class CommandBusBase<O extends Options = Options> {
         handlersInstances.forEach((handler) => this.registerHandlerInstance(handler))
     }
 
+    /**
+     * Registers the handler so it's intance execute function can
+     * be called later by the bus
+     */
+    public registerHandlerFactory(
+        Handler: IType<ICommandHandler>,
+        injectionResolver?: CommandBusOptions['injectionResolver'],
+    ): void {
+        const resolver = injectionResolver || this.injectionResolver
+        if (!resolver) {
+            throw new Error('injectionResolver is required')
+        }
+        return this.registerHandlerInstance(injectionResolver(Handler))
+    }
+
+    /**
+     * Registers all the handlers
+     */
+    public registerHandlersFactories(
+        handlersFactories: Array<IType<ICommandHandler>> = [],
+        injectionResolver?: CommandBusOptions['injectionResolver'],
+    ): void {
+        handlersFactories.forEach((handlerFactory) =>
+            this.registerHandlerFactory(handlerFactory, injectionResolver),
+        )
+    }
+
     // EXECUTION
 
     /**
      * Executes the command
      */
-    public execute<T extends CommandType = CommandType, ExecuteOptions extends O = O>(command: T, options?:  ExecuteOptions ): T[ResultType] {
+    public execute<T extends CommandType = CommandType, ExecuteOptions extends O = O>(
+        command: T,
+        options?: ExecuteOptions,
+    ): T[ResultType] {
         const constructor = getConstructor(command as any)
 
-        const context:CommandContext = Reflect.getMetadata(COMMAND_CONTEXT, command) || new CommandContext<ExecuteOptions>()
+        const context: CommandContext =
+            Reflect.getMetadata(COMMAND_CONTEXT, command) || new CommandContext<ExecuteOptions>()
         context.commands.add(command)
 
-        context.execute = (<T2 extends CommandType = CommandType, OptionsContext extends ExecuteOptions = ExecuteOptions>(command2: T2, optionsContext?: OptionsContext): T2[ResultType] => {
+        context.execute = (<
+            T2 extends CommandType = CommandType,
+            OptionsContext extends ExecuteOptions = ExecuteOptions,
+        >(
+            command2: T2,
+            optionsContext?: OptionsContext,
+        ): T2[ResultType] => {
             Reflect.defineMetadata(COMMAND_CONTEXT, context, command)
             return this.execute<T2, OptionsContext>(command2, optionsContext)
         }) as CommandContext<ExecuteOptions>['execute']
@@ -89,17 +135,23 @@ export abstract class CommandBusBase<O extends Options = Options> {
     protected executeByName<T extends CommandType = CommandType>(
         commandName: string,
         data: T,
-        options?: O
+        options?: O,
     ): T[ResultType] {
-
         const context = Reflect.getMetadata(COMMAND_CONTEXT, data)
         const handler: ICommandHandler = this.handlers.get(commandName)
 
-        const d = this.plugins?.getPlugins(HANDLERS.BEFORE_EXECUTE_HANDLER)?.(data, commandName, handler, context, options) || data
+        const d =
+            this.plugins?.getPlugins(HANDLERS.BEFORE_EXECUTE_HANDLER)?.(
+                data,
+                commandName,
+                handler,
+                context,
+                options,
+            ) || data
 
         if (!handler) {
             const pluginErrorHook = this.plugins?.getPlugins(HANDLERS.BEFORE_EXECUTE_HANDLER)
-            if(pluginErrorHook) {
+            if (pluginErrorHook) {
                 return pluginErrorHook(d, commandName, handler, options)
             } else {
                 throw new InvalidQueueHandlerException(commandName)
@@ -107,10 +159,23 @@ export abstract class CommandBusBase<O extends Options = Options> {
         }
 
         try {
+            const result = (
+                this.plugins?.getPlugins(HANDLERS.INTERCEPT_EXECUTION_HANDLER)?.(
+                    commandName,
+                    handler,
+                    options,
+                    handler.execute,
+                ) || handler.execute
+            )(d, context)
 
-            const result = (this.plugins?.getPlugins(HANDLERS.INTERCEPT_EXECUTION_HANDLER)?.(commandName, handler, options, handler.execute) || handler.execute)(d, context)
-
-            this.plugins?.getPlugins(HANDLERS.AFTER_EXECUTE_HANDLER)?.(data, commandName, handler, context, options, result)
+            this.plugins?.getPlugins(HANDLERS.AFTER_EXECUTE_HANDLER)?.(
+                data,
+                commandName,
+                handler,
+                context,
+                options,
+                result,
+            )
             if (isFunction((result as Observable<any>)?.subscribe)) {
                 return result as Observable<any>
             } else if ((result as UndoableResult<any>).value) {
