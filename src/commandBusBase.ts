@@ -1,11 +1,23 @@
-import { Observable } from 'rxjs'
+import {
+    filter,
+    from,
+    map,
+    mergeMap,
+    Observable,
+    of,
+    OperatorFunction,
+    Subject,
+    Subscription,
+    take,
+    tap,
+} from 'rxjs'
 
 import { COMMAND_BUS_OPTIONS, COMMAND_HANDLER_METADATA, ResultType } from './constants'
 import { InvalidQueueHandlerException } from './exceptions/invalidCommandHandler.exception'
 import { getConstructor, isFunction } from './helpers'
 import { ICommandHandler } from './interfaces/commandHandler.interface'
 import { IType } from './interfaces/type.interface'
-import { CommandType, UndoableResult } from './models/command'
+import { CommandType, UndoableHandlerResult } from './models/command'
 import { CommandBusOptions } from './models/commandBusOptions'
 
 export type HandlerType = IType<ICommandHandler>
@@ -18,12 +30,41 @@ export abstract class CommandBusBase {
     protected name: string
     protected injectionResolver: CommandBusOptions['injectionResolver']
 
+    private _afterExecute = new Set<OperatorFunction<CommandType[ResultType], any>>()
+
+    public queue$ = new Subject<[CommandType, symbol]>()
+    public results$ = new Subject<[CommandType[ResultType], symbol]>()
+    public subscription = new Subscription()
+
     constructor(options?: CommandBusOptions) {
         const parsedOptions = new CommandBusOptions(
             options || Reflect.getMetadata(COMMAND_BUS_OPTIONS, this.constructor) || {},
         )
         this.injectionResolver = parsedOptions.injectionResolver
         this.name = parsedOptions.name
+
+        this.subscription.add(
+            this.queue$
+                .pipe(
+                    mergeMap(([command, id]) => {
+                        const constructor = getConstructor(command as any)
+                        return this.executeByName(constructor.name, command).pipe(
+                            map((command) => {
+                                if (this._afterExecute.size) {
+                                    const obs = of(command)
+                                    // eslint-disable-next-line prefer-spread
+                                    return obs.pipe.apply(obs, this._afterExecute.values())
+                                }
+                                return of(command)
+                            }),
+                            tap((result: CommandType[ResultType]) =>
+                                this.results$.next([result, id]),
+                            ),
+                        )
+                    }),
+                )
+                .subscribe(),
+        )
     }
 
     // HANDLERS
@@ -37,6 +78,18 @@ export abstract class CommandBusBase {
         handlerInstance?: ICommandHandler,
     ): void {
         this.handlers.set(commandName, [handler, handlerInstance])
+    }
+
+    public afterExecute(...operators: Array<OperatorFunction<CommandType[ResultType], any>>) {
+        for (const operator of operators) {
+            this._afterExecute.add(operator)
+        }
+
+        return () => {
+            for (const operator of operators) {
+                this._afterExecute.delete(operator)
+            }
+        }
     }
 
     /**
@@ -114,8 +167,15 @@ export abstract class CommandBusBase {
      * Executes the command
      */
     public execute<T extends CommandType = CommandType>(command: T): T[ResultType] {
-        const constructor = getConstructor(command as any)
-        return this.executeByName<T>(constructor.name, command)
+        const id = Symbol()
+        const result$ = this.results$.pipe(
+            filter(([, resultId]) => resultId === id),
+            take(1),
+            mergeMap(([result]) => result),
+        )
+
+        this.queue$.next([command, id])
+        return result$
     }
 
     /**
@@ -124,8 +184,12 @@ export abstract class CommandBusBase {
     protected executeByName<T extends CommandType = CommandType>(
         commandName: string,
         data: T,
-    ): T[ResultType] {
-        const handler: (command: T) => T[ResultType] = this.handlers.get(commandName)[0]
+    ): Observable<any> {
+        const handler: (
+            command: T,
+        ) => T[ResultType] extends Observable<infer M>
+            ? M | Promise<M> | Observable<M>
+            : T[ResultType] = this.handlers.get(commandName)[0] as any
 
         if (!handler) {
             throw new InvalidQueueHandlerException(commandName)
@@ -134,25 +198,31 @@ export abstract class CommandBusBase {
         try {
             const result = handler(data)
 
-            if (isFunction((result as Observable<any>)?.subscribe)) {
-                return result as Observable<any>
-            } else if ((result as UndoableResult<any>).value) {
-                if (
-                    isFunction(
-                        ((result as UndoableResult<any>).value as Observable<any>)?.subscribe,
-                    )
-                ) {
-                    return result as T[ResultType]
-                }
+            if (!result) {
+                return of(result) as Observable<any>
             }
 
-            return Promise.resolve(result) as T[ResultType] extends Observable<infer O>
-                ? Observable<O>
-                : T[ResultType]
+            if (isFunction((result as Observable<any>)?.subscribe)) {
+                return result as Observable<any>
+            } else if (
+                (result as UndoableHandlerResult<any>).value &&
+                isFunction((result as any).undo)
+            ) {
+                const r: any = (result as any).value
+                if (isFunction((r.value as Observable<any>)?.subscribe)) {
+                    return r.value.pipe(map((v) => [v, r.undo]))
+                }
+                return from(Promise.resolve(r.value).then((v) => [v, r.undo]))
+            }
+
+            return from(Promise.resolve(result)) as Observable<any>
         } catch (err) {
-            return Promise.reject(err) as T[ResultType] extends Observable<infer O>
-                ? Observable<O>
-                : T[ResultType]
+            return from(Promise.reject(err)) as Observable<any>
         }
+    }
+
+    public async closeQueue() {
+        this.queue$.complete()
+        this.subscription.unsubscribe()
     }
 }
