@@ -1,70 +1,25 @@
-import {
-    filter,
-    from,
-    map,
-    mergeMap,
-    Observable,
-    of,
-    OperatorFunction,
-    Subject,
-    Subscription,
-    take,
-    tap,
-} from 'rxjs'
-
+import { Options } from '.'
 import { COMMAND_BUS_OPTIONS, COMMAND_HANDLER_METADATA, ResultType } from './constants'
 import { InvalidQueueHandlerException } from './exceptions/invalidCommandHandler.exception'
-import { getConstructor, isFunction } from './helpers'
-import { ICommandHandler } from './interfaces/commandHandler.interface'
+import { getConstructor } from './helpers'
+import { CommandHandler, Handler, HandlerType } from './interfaces'
 import { IType } from './interfaces/type.interface'
-import { CommandType, UndoableHandlerResult } from './models/command'
+import { Command } from './models/command'
 import { CommandBusOptions } from './models/commandBusOptions'
 
-export type HandlerType = IType<ICommandHandler>
-
-export abstract class CommandBusBase {
-    protected handlers = new Map<
-        string,
-        [(command: CommandType) => CommandType[ResultType], ICommandHandler]
-    >()
+export abstract class CommandBusBase<C extends Command = Command, O extends Options = Options> {
+    protected handlers = new Map<string, [Handler<C, O>, CommandHandler<C, O>?]>()
     protected name: string
-    protected injectionResolver: CommandBusOptions['injectionResolver']
+    protected injectionResolver: CommandBusOptions<C, O>['injectionResolver']
+    public onExecute?: CommandBusOptions<C, O>['onExecute']
 
-    private _afterExecute = new Set<OperatorFunction<CommandType[ResultType], any>>()
-
-    public queue$ = new Subject<[CommandType, symbol]>()
-    public results$ = new Subject<[CommandType[ResultType], symbol]>()
-    public subscription = new Subscription()
-
-    constructor(options?: CommandBusOptions) {
-        const parsedOptions = new CommandBusOptions(
+    constructor(options?: CommandBusOptions<C, O>) {
+        const parsedOptions = new CommandBusOptions<C, O>(
             options || Reflect.getMetadata(COMMAND_BUS_OPTIONS, this.constructor) || {},
         )
+        this.onExecute = parsedOptions.onExecute
         this.injectionResolver = parsedOptions.injectionResolver
         this.name = parsedOptions.name
-
-        this.subscription.add(
-            this.queue$
-                .pipe(
-                    mergeMap(([command, id]) => {
-                        const constructor = getConstructor(command as any)
-                        return this.executeByName(constructor.name, command).pipe(
-                            map((command) => {
-                                if (this._afterExecute.size) {
-                                    const obs = of(command)
-                                    // eslint-disable-next-line prefer-spread
-                                    return obs.pipe.apply(obs, this._afterExecute.values())
-                                }
-                                return of(command)
-                            }),
-                            tap((result: CommandType[ResultType]) =>
-                                this.results$.next([result, id]),
-                            ),
-                        )
-                    }),
-                )
-                .subscribe(),
-        )
     }
 
     // HANDLERS
@@ -72,36 +27,24 @@ export abstract class CommandBusBase {
     /**
      * Uses the Handler class instance, keeping a reference to call later it's execute function
      */
-    public bindHandler<T extends CommandType = CommandType>(
+    public bindHandler<T extends C = C>(
         handler: (command: T) => T[ResultType],
         commandName: string,
-        handlerInstance?: ICommandHandler,
+        handlerInstance?: CommandHandler<T, O>,
     ): void {
         this.handlers.set(commandName, [handler, handlerInstance])
-    }
-
-    public afterExecute(...operators: Array<OperatorFunction<CommandType[ResultType], any>>) {
-        for (const operator of operators) {
-            this._afterExecute.add(operator)
-        }
-
-        return () => {
-            for (const operator of operators) {
-                this._afterExecute.delete(operator)
-            }
-        }
     }
 
     /**
      * Registers the handler so it's intance execute function can
      * be called later by the bus
      */
-    public registerHandlerInstance(handlerInstance: ICommandHandler): void {
+    public registerHandlerInstance(handlerInstance: CommandHandler<C, O>): void {
         const handler = handlerInstance
 
         const constructor = getConstructor(handler)
 
-        const target: { data: IType<CommandType>; bus: CommandBusBase } = Reflect.getMetadata(
+        const target: { data: IType<C>; bus: CommandBusBase } = Reflect.getMetadata(
             COMMAND_HANDLER_METADATA,
             getConstructor(handlerInstance),
         )
@@ -120,7 +63,7 @@ export abstract class CommandBusBase {
     /**
      * Registers all the handlers
      */
-    public registerHandlersInstances(handlersInstances: ICommandHandler[] = []): void {
+    public registerHandlersInstances(handlersInstances: Array<CommandHandler<C, O>> = []): void {
         handlersInstances.forEach((handler) => this.registerHandlerInstance(handler))
     }
 
@@ -129,7 +72,7 @@ export abstract class CommandBusBase {
      * be called later by the bus
      */
     public registerHandlerFactory(
-        Handler: IType<ICommandHandler>,
+        Handler: HandlerType<C, O>,
         injectionResolver?: CommandBusOptions['injectionResolver'],
     ): void {
         const resolver = injectionResolver || this.injectionResolver
@@ -143,7 +86,7 @@ export abstract class CommandBusBase {
      * Registers all the handlers
      */
     public registerHandlersFactories(
-        handlersFactories: Array<IType<ICommandHandler>> = [],
+        handlersFactories: Array<HandlerType<C, O>> = [],
         injectionResolver?: CommandBusOptions['injectionResolver'],
     ): void {
         handlersFactories.forEach((handlerFactory) =>
@@ -154,11 +97,20 @@ export abstract class CommandBusBase {
     /**
      * Registers all the handlers
      */
-    public registerFunctionHandler<T extends CommandType>(
+    public registerFunctionHandler<T extends C = C>(
         command: IType<T>,
-        handler: (command: T) => T[ResultType],
+        handler: Handler<T, O>,
     ): void {
         this.bindHandler(handler, command.name)
+    }
+
+    /**
+     * Register function handlers
+     */
+    public registerFunctionHandlers(handlers: Array<[IType<C>, Handler<C, O>]>): void {
+        for (const [command, handler] of handlers) {
+            this.registerFunctionHandler(command, handler)
+        }
     }
 
     // EXECUTION
@@ -166,63 +118,30 @@ export abstract class CommandBusBase {
     /**
      * Executes the command
      */
-    public execute<T extends CommandType = CommandType>(command: T): T[ResultType] {
-        const id = Symbol()
-        const result$ = this.results$.pipe(
-            filter(([, resultId]) => resultId === id),
-            take(1),
-            mergeMap(([result]) => result),
-        )
+    public execute<T extends C = C>(command: T, options?: O): T[ResultType] {
+        const commandName = command.constructor.name
 
-        this.queue$.next([command, id])
-        return result$
+        return this.executeByName(commandName, command, options).toPromise()
     }
 
     /**
      * Executes the registered handler for the command name
      */
-    protected executeByName<T extends CommandType = CommandType>(
+    protected executeByName<T extends C = C, Opts extends O = O>(
         commandName: string,
         data: T,
-    ): Observable<any> {
-        const handler: (
-            command: T,
-        ) => T[ResultType] extends Observable<infer M>
-            ? M | Promise<M> | Observable<M>
-            : T[ResultType] = this.handlers.get(commandName)[0] as any
+        options?: Opts,
+    ): C[ResultType] {
+        const [handler, handlerInstance] = this.handlers.get(commandName)
 
         if (!handler) {
             throw new InvalidQueueHandlerException(commandName)
         }
 
-        try {
-            const result = handler(data)
-
-            if (!result) {
-                return of(result) as Observable<any>
-            }
-
-            if (isFunction((result as Observable<any>)?.subscribe)) {
-                return result as Observable<any>
-            } else if (
-                (result as UndoableHandlerResult<any>).value &&
-                isFunction((result as any).undo)
-            ) {
-                const r: any = (result as any).value
-                if (isFunction((r.value as Observable<any>)?.subscribe)) {
-                    return r.value.pipe(map((v) => [v, r.undo]))
-                }
-                return from(Promise.resolve(r.value).then((v) => [v, r.undo]))
-            }
-
-            return from(Promise.resolve(result)) as Observable<any>
-        } catch (err) {
-            return from(Promise.reject(err)) as Observable<any>
+        if (this.onExecute) {
+            return this.onExecute(data, handler, options, handlerInstance)
         }
-    }
 
-    public async closeQueue() {
-        this.queue$.complete()
-        this.subscription.unsubscribe()
+        return handler(data, options)
     }
 }
