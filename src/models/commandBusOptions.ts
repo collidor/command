@@ -17,7 +17,7 @@ export class CommandBusOptions<C extends Command = Command, O extends Options = 
         instance?: CommandHandler<T, O>,
     ): T[ResultType]
 
-    constructor(options?: CommandBusOptions) {
+    constructor(options?: Partial<CommandBusOptions>) {
         if (options) {
             Object.assign(this, options)
         }
