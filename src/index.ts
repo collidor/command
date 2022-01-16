@@ -1,3 +1,5 @@
+import 'reflect-metadata'
+
 export * from './commandBusBase'
 export * from './decorators'
 export * from './models'
