@@ -121,7 +121,7 @@ export abstract class CommandBusBase<C extends Command = Command, O extends Opti
     public execute<T extends C = C>(command: T, options?: O): T[ResultType] {
         const commandName = command.constructor.name
 
-        return this.executeByName(commandName, command, options).toPromise()
+        return this.executeByName(commandName, command, options)
     }
 
     /**
