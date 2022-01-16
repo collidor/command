@@ -1,4 +1,4 @@
-import { CommandBusBase, CommandBusOptions, CommandHandler, CommandType } from '..'
+import { Command, CommandBusBase, CommandBusOptions, CommandHandler } from '..'
 import { COMMAND_BUS_OPTIONS, ResultType } from '../constants'
 import { IType } from '../interfaces/type.interface'
 
@@ -13,11 +13,11 @@ export function createCommandBus<T extends Capitalize<string>>(
     [key in `${Uncapitalize<T>}`]: CommandBusBase
 } & {
     [key in `${T}Handler`]: (
-        command: IType<CommandType>,
+        command: IType<Command>,
         resolver?: boolean | CommandBusOptions['injectionResolver'],
     ) => ClassDecorator
 } & {
-    bind<T extends CommandType>(command: IType<T>, handler: (command: T) => T[ResultType]): void
+    bind<T extends Command>(command: IType<T>, handler: (command: T) => T[ResultType]): void
 } {
     const ret = {
         [name as `${T}`]: class extends CommandBusBase {},
@@ -25,7 +25,7 @@ export function createCommandBus<T extends Capitalize<string>>(
     Reflect.defineMetadata(COMMAND_BUS_OPTIONS, options, ret[name])
     const bus = new ret[name]()
     const decorator = (
-        command: IType<CommandType>,
+        command: IType<Command>,
         resolver: boolean | CommandBusOptions['injectionResolver'],
     ) => CommandHandler(bus, command, resolver)
 

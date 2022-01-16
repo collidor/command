@@ -1,12 +1,12 @@
 import { CommandBusBase } from '../commandBusBase'
 import { COMMAND_HANDLER_METADATA } from '../constants'
 import { IType } from '../interfaces/type.interface'
-import { CommandType } from '../models/command'
+import { Command } from '../models/command'
 import { CommandBusOptions } from '../models/commandBusOptions'
 
 export const CommandHandler = (
     bus: CommandBusBase,
-    command: IType<CommandType>,
+    command: IType<Command>,
     resolver?: boolean | CommandBusOptions['injectionResolver'],
 ): ClassDecorator => {
     return (target: any): void => {
