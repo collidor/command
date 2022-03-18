@@ -14,9 +14,10 @@ export abstract class CommandBusBase<C extends Command = Command, O extends Opti
     public onExecute?: CommandBusOptions<C, O>['onExecute']
 
     constructor(options?: CommandBusOptions<C, O>) {
-        const parsedOptions = new CommandBusOptions<C, O>(
-            options || Reflect.getMetadata(COMMAND_BUS_OPTIONS, this.constructor) || {},
-        )
+        const parsedOptions = new CommandBusOptions<C, O>({
+            ...(Reflect.getMetadata(COMMAND_BUS_OPTIONS, this.constructor) || {}),
+            ...(options || {}),
+        })
         this.onExecute = parsedOptions.onExecute
         this.injectionResolver = parsedOptions.injectionResolver
         this.name = parsedOptions.name
@@ -132,14 +133,14 @@ export abstract class CommandBusBase<C extends Command = Command, O extends Opti
         data: T,
         options?: Opts,
     ): C[ResultType] {
-        const [handler, handlerInstance] = this.handlers.get(commandName)
+        const [handler, instance] = this.handlers.get(commandName)
 
         if (!handler) {
             throw new InvalidQueueHandlerException(commandName)
         }
 
         if (this.onExecute) {
-            return this.onExecute(data, handler, options, handlerInstance)
+            return this.onExecute(data, { handler, name: commandName, options, instance })
         }
 
         return handler(data, options)

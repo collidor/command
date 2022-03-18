@@ -1,21 +1,19 @@
-import { Options } from '..'
-import { ResultType } from '../constants'
-import { CommandHandler, Handler } from '../interfaces'
+import { Options as BaseOptions } from '..'
+import { CommandHandler } from '../interfaces'
+import { OnExecute } from '../interfaces/onExecute.interface'
 import { IType } from '../interfaces/type.interface'
 import { Command } from '.'
 
-export class CommandBusOptions<C extends Command = Command, O extends Options = Options> {
+export class CommandBusOptions<
+    C extends Command = Command,
+    Options extends BaseOptions = BaseOptions,
+> {
     public name?: string
-    public injectionResolver: <T = CommandHandler<C, O>>(constructor: IType<T>) => T = (
+    public injectionResolver: <T = CommandHandler<C, Options>>(constructor: IType<T>) => T = (
         constructor,
     ) => new constructor()
 
-    public onExecute?<T extends C = C>(
-        data: C,
-        handler: Handler<T, O>,
-        options?: O,
-        instance?: CommandHandler<T, O>,
-    ): T[ResultType]
+    public onExecute?: OnExecute<C, Options>
 
     constructor(options?: Partial<CommandBusOptions>) {
         if (options) {
