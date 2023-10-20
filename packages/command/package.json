@@ -1,7 +1,7 @@
 {
   "name": "@collidor/command",
   "version": "0.1.0",
-  "main": "./index.tsx",
+  "main": "./dist/index.js",
   "types": "./src/index.ts",
   "license": "MIT",
   "scripts": {
