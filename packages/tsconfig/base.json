@@ -15,7 +15,10 @@
     "preserveWatchOutput": true,
     "skipLibCheck": true,
     "strict": true,
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "experimentalDecorators": false,
+    "emitDecoratorMetadata": false,
+    "allowJs": true
   },
   "exclude": ["node_modules"]
 }

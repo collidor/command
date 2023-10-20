@@ -3,15 +3,33 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {
+    "@jest/globals": "^29.6.4",
+    "@jest/types": "^29.6.3",
+    "@typescript-eslint/eslint-plugin": "^6.5.0",
+    "@typescript-eslint/parser": "^6.5.0",
     "eslint": "^8.48.0",
+    "eslint-config-prettier": "9.0.0",
+    "eslint-plugin-import": "^2.25.2",
+    "eslint-plugin-prettier": "^5.0.0",
+    "eslint-plugin-simple-import-sort": "^10.0.0",
+    "eslint-plugin-sort-class-members": "^1.18.0",
+    "eslint-plugin-sort-imports-es6-autofix": "^0.6.0",
+    "glob": "^10.3.4",
+    "jest": "^29.6.4",
     "prettier": "^3.0.3",
+    "ts-jest": "^29.1.1",
     "tsconfig": "workspace:*",
-    "turbo": "latest"
+    "turbo": "latest",
+    "typescript": "^5.2.2"
   },
   "packageManager": "pnpm@8.6.10",
-  "name": "command"
+  "name": "command",
+  "dependencies": {
+    "rxjs": "^7.8.1"
+  }
 }
