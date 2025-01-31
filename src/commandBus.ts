@@ -1,4 +1,4 @@
-import type { Injector } from "@collidor/injector";
+import type { Injector, Type } from "@collidor/injector";
 import type { Command, COMMAND_RETURN } from "./commandModel.ts";
 
 export type CommandHandler<C extends Command = Command> = (
@@ -10,14 +10,14 @@ export type CommandHandlerConstructor<C extends Command = Command> = Type<
 >;
 
 export class CommandBus<BaseComandHandler extends CommandHandler> {
-    public commandsHandlers = new Map<
+    public commandsHandlers: Map<
         string,
         CommandHandler<any>
-    >();
-    public commandHandlerConstructors = new Map<
+    > = new Map();
+    public commandHandlerConstructors: Map<
         string,
         CommandHandlerConstructor<any>
-    >();
+    > = new Map();
 
     constructor(protected inject: Injector["inject"]) {}
 
