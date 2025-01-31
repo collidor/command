@@ -1,0 +1,32 @@
+{
+    "name": "@collidor/command",
+    "version": "1.0.0",
+    "license": "MIT",
+    "exports": "./src/main.ts",
+    "publish": {
+        "include": [
+            "./src/**/*",
+            "README.md",
+            "deno.json",
+            "deno.lock",
+            "LICENSE"
+        ],
+        "exclude": [
+            "dist"
+        ]
+    },
+    "tasks": {
+        "dev": "deno run --watch ./src/main.ts"
+    },
+    "imports": {
+        "@std/assert": "jsr:@std/assert@1",
+        "@collidor/injector": "jsr:@collidor/injector@^1.0.5"
+    },
+    "lint": {
+        "rules": {
+            "exclude": [
+                "no-explicit-any"
+            ]
+        }
+    }
+}

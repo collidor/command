@@ -1,0 +1,35 @@
+{
+    "name": "@collidor/command",
+    "version": "1.0.0",
+    "description": "A small library to create, register and execute commands.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/collidor/command"
+    },
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./src/main.ts",
+            "import": "./dist/main.mjs",
+            "require": "./dist/main.cjs"
+        }
+    },
+    "scripts": {
+        "test": "deno test",
+        "build": "tsup src/main.ts --format esm,cjs"
+    },
+    "keywords": [
+        "command",
+        "command bus",
+        "command handler"
+    ],
+    "author": "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
+    "license": "MIT",
+    "dependencies": {
+        "@collidor/injector": "^1.0.5"
+    },
+    "devDependencies": {
+        "tsup": "^8.3.6",
+        "typescript": "^5.7.3"
+    }
+}

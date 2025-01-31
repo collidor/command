@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleDetection": "auto",
+    "moduleResolution": "Bundler",
+    "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2019",
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "isolatedModules": false
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
