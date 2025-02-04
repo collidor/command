@@ -42,3 +42,21 @@ Deno.test("commandBus - should throw if handler is not found", () => {
     commandBus.execute(new ExampleCommand(42));
   });
 });
+
+Deno.test("commandBus - should throw if command is not a class instance", () => {
+  const injector = new Injector();
+  const commandBus = new CommandBus(injector.inject);
+
+  assertThrows(() => {
+    commandBus.execute({ value: 42 } as any);
+  });
+});
+
+Deno.test("commandBus - should return null if execute is called with isVoid true", () => {
+  const injector = new Injector();
+  const commandBus = new CommandBus(injector.inject);
+
+  commandBus.bind(ExampleCommand, (command) => command.value);
+
+  assertEquals(commandBus.execute(new ExampleCommand(42), true), null);
+});
