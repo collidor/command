@@ -1,22 +1,18 @@
 {
     "name": "@collidor/command",
-    "version": "2.1.1",
+    "version": "2.1.2",
     "description": "A small library to create, register and execute commands.",
     "repository": {
         "type": "git",
         "url": "https://github.com/collidor/command"
     },
     "type": "module",
-    "exports": {
-        ".": {
-            "types": "./src/main.ts",
-            "import": "./dist/main.mjs",
-            "require": "./dist/main.cjs"
-        }
-    },
+    "main": "dist/main.cjs",
+    "module": "dist/main.mjs",
+    "types": "src/main.d.ts",
     "scripts": {
         "test": "deno test",
-        "build": "tsup src/main.ts --format esm,cjs"
+        "build": "tsup src/main.ts --sourcemap --dts --format esm,cjs"
     },
     "keywords": [
         "command",
@@ -29,6 +25,7 @@
         "@collidor/injector": "2.0.0"
     },
     "devDependencies": {
+        "@swc/core": "^1.10.14",
         "tsup": "^8.3.6",
         "typescript": "^5.7.3"
     }
