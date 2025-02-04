@@ -1,6 +1,6 @@
 {
     "name": "@collidor/command",
-    "version": "2.1.3",
+    "version": "2.1.4",
     "description": "A small library to create, register and execute commands.",
     "repository": {
         "type": "git",
@@ -21,12 +21,13 @@
     ],
     "author": "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
     "license": "MIT",
-    "dependencies": {
-        "@collidor/injector": "2.0.0"
+    "peerDependencies": {
+        "@collidor/injector": "^2"
     },
     "devDependencies": {
         "@swc/core": "^1.10.14",
         "tsup": "^8.3.6",
-        "typescript": "^5.7.3"
+        "typescript": "^5.7.3",
+        "@collidor/injector": "^2.0.1"
     }
 }
