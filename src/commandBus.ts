@@ -76,8 +76,8 @@ export class CommandBus<
     command: C,
     isVoid = false,
   ): C[COMMAND_RETURN] {
-    if (!command.constructor) {
-      throw new Error("Command must have a constructor");
+    if (command.constructor.name === "Object") {
+      throw new Error("command must be a Command class instance");
     }
     let handler = this.commandsHandlers.get(
       command.constructor.name,
