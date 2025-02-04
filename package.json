@@ -1,6 +1,6 @@
 {
     "name": "@collidor/command",
-    "version": "2.1.2",
+    "version": "2.1.3",
     "description": "A small library to create, register and execute commands.",
     "repository": {
         "type": "git",
@@ -9,7 +9,7 @@
     "type": "module",
     "main": "dist/main.cjs",
     "module": "dist/main.mjs",
-    "types": "src/main.d.ts",
+    "types": "dist/main.d.ts",
     "scripts": {
         "test": "deno test",
         "build": "tsup src/main.ts --sourcemap --dts --format esm,cjs"
