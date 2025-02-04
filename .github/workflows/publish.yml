@@ -8,8 +8,29 @@ on:
       - main
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Run Tests with Coverage
+        run: deno test --coverage
+
+      - name: Generate LCOV Report
+        run: deno coverage --lcov --output=./coverage/lcov.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
   publish:
     runs-on: ubuntu-latest
+    if: success()
     permissions:
       contents: read
       id-token: write # The OIDC ID token is used for authentication with JSR.

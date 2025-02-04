@@ -1,17 +1,16 @@
 {
   "version": "4",
   "specifiers": {
-    "jsr:@collidor/injector@^1.0.5": "1.0.5",
+    "jsr:@collidor/injector@2": "2.0.0",
     "jsr:@std/assert@*": "1.0.11",
     "jsr:@std/assert@1": "1.0.11",
     "jsr:@std/internal@^1.0.5": "1.0.5",
-    "npm:@collidor/injector@^1.0.5": "1.0.5",
     "npm:tsup@^8.3.6": "8.3.6_typescript@5.7.3_esbuild@0.24.0",
     "npm:typescript@^5.7.3": "5.7.3"
   },
   "jsr": {
-    "@collidor/injector@1.0.5": {
-      "integrity": "f7b5dcf3418c86f2fc6b8cccd671ecc75ab8b0349aa3d4c3cb51ce012aac2f90"
+    "@collidor/injector@2.0.0": {
+      "integrity": "6a8ab212e5b337cc4797c0ebb4c55a905d68d2697f76a696b4b535316032cebe"
     },
     "@std/assert@1.0.11": {
       "integrity": "2461ef3c368fe88bc60e186e7744a93112f16fd110022e113a0849e94d1c83c1",
@@ -24,9 +23,6 @@
     }
   },
   "npm": {
-    "@collidor/injector@1.0.5": {
-      "integrity": "sha512-l/Yk4ePn7yRgvlU9QgDq5QT9/Nb4z7cbpyQC+P1Uyts/NhRf0UeeLot708+pXf6As6+xUI+P6kA4zcJNxBV0zg=="
-    },
     "@esbuild/aix-ppc64@0.24.0": {
       "integrity": "sha512-WtKdFM7ls47zkKHFVzMz8opM7LkcsIp9amDUBIAWirg70RM71WRSjdILPsY5Uv1D42ZpUfaPILDlfactHgsRkw=="
     },
@@ -600,7 +596,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@collidor/injector@^1.0.5",
+      "jsr:@collidor/injector@2",
       "jsr:@std/assert@1"
     ],
     "packageJson": {

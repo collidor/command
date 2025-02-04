@@ -1,6 +1,6 @@
 {
     "name": "@collidor/command",
-    "version": "2.0.1",
+    "version": "2.1.0",
     "license": "MIT",
     "exports": "./src/main.ts",
     "publish": {
@@ -20,7 +20,7 @@
     },
     "imports": {
         "@std/assert": "jsr:@std/assert@1",
-        "@collidor/injector": "jsr:@collidor/injector@^1.0.5"
+        "@collidor/injector": "jsr:@collidor/injector@^2.0.0"
     },
     "lint": {
         "rules": {
@@ -28,5 +28,18 @@
                 "no-explicit-any"
             ]
         }
-    }
+    },
+    "compilerOptions": {
+        "lib": [
+            "ESNext",
+            "deno.window"
+        ],
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "noUncheckedIndexedAccess": true,
+        "strict": true
+    },
+    "unstable": [
+        "sloppy-imports"
+    ]
 }
