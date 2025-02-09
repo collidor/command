@@ -1,6 +1,6 @@
-// commandBus.ts
-import type { Injector, Type } from "@collidor/injector";
 import type { Command, COMMAND_RETURN } from "./commandModel.ts";
+
+export type Type<T> = new (...args: any[]) => T;
 
 export type PluginHandler<C extends Command, TContext, R = C[COMMAND_RETURN]> =
   (
@@ -29,9 +29,7 @@ type ReturnTypeMapper<T, R> = T extends Promise<any> ? Promise<R>
   : T;
 
 export class CommandBus<
-  TContext extends { inject: Injector["inject"] } = {
-    inject: Injector["inject"];
-  },
+  TContext extends Record<string, any> = Record<string, any>,
   TPlugin extends PluginHandler<Command, TContext, any> = PluginHandler<
     Command,
     TContext,
@@ -45,11 +43,10 @@ export class CommandBus<
   private plugin?: TPlugin;
 
   constructor(
-    private inject: Injector["inject"],
     options?: CommandBusOptions<TContext, TPlugin>,
   ) {
     this.plugin = options?.plugin;
-    this.context = options?.context || { inject } as TContext;
+    this.context = options?.context || {} as TContext;
   }
 
   private context: TContext;
@@ -81,8 +78,6 @@ export class CommandBus<
       throw new Error(`No handler registered for ${command.constructor.name}`);
     }
 
-    const baseExecution = () => handler(command, this.context);
-
-    return baseExecution() as any;
+    return handler(command, this.context) as any;
   }
 }
