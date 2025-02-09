@@ -2,13 +2,14 @@
 import type { Injector, Type } from "@collidor/injector";
 import type { Command, COMMAND_RETURN } from "./commandModel.ts";
 
-type PluginHandler<C extends Command, TContext, R = C[COMMAND_RETURN]> = (
-  command: C,
-  context: TContext,
-  handler?: (command: C, context: TContext) => C[COMMAND_RETURN],
-) => R;
+export type PluginHandler<C extends Command, TContext, R = C[COMMAND_RETURN]> =
+  (
+    command: C,
+    context: TContext,
+    handler?: (command: C, context: TContext) => C[COMMAND_RETURN],
+  ) => R;
 
-interface CommandBusOptions<
+export interface CommandBusOptions<
   TContext,
   TPlugin extends PluginHandler<Command, TContext, any>,
 > {
