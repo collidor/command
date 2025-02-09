@@ -1,113 +1,87 @@
+// commandBus.ts
 import type { Injector, Type } from "@collidor/injector";
 import type { Command, COMMAND_RETURN } from "./commandModel.ts";
 
-export interface CommandBusContext {
-  inject: Injector["inject"];
+type PluginHandler<C extends Command, TContext, R = C[COMMAND_RETURN]> = (
+  command: C,
+  context: TContext,
+  handler?: (command: C, context: TContext) => C[COMMAND_RETURN],
+) => R;
+
+interface CommandBusOptions<
+  TContext,
+  TPlugin extends PluginHandler<Command, TContext, any>,
+> {
+  context?: TContext;
+  plugin?: TPlugin;
 }
 
-export type CommandHandler<
-  TContext extends CommandBusContext = CommandBusContext,
-  BaseCommand extends Command = Command,
-> = <C extends BaseCommand = BaseCommand>(
-  arg: C,
-  context: TContext,
-) => C[COMMAND_RETURN];
-
-export type CommandInstance<
-  TContext extends CommandBusContext = CommandBusContext,
-  BaseCommand extends Command = Command,
-> = { execute: CommandHandler<TContext, BaseCommand> };
-
-export type CommandHandlerConstructor<
-  TContext extends CommandBusContext = CommandBusContext,
-> = Type<CommandInstance<TContext>>;
+type ReturnTypeMapper<T, R> = T extends Promise<any> ? Promise<R>
+  : T extends Iterable<any> ? Iterable<R>
+  : T extends Iterator<any> ? Iterable<R>
+  : T extends IterableIterator<any> ? Iterable<R>
+  : T extends AsyncIterable<any> ? Iterable<R>
+  : T extends AsyncIterator<any> ? Iterable<R>
+  : T extends Generator<any> ? Iterable<R>
+  : T extends ReadableStream<any> ? Iterable<R>
+  : T extends ReadableStreamDefaultReader<any> ? Iterable<R>
+  : T;
 
 export class CommandBus<
-  TContext extends CommandBusContext = CommandBusContext,
+  TContext extends { inject: Injector["inject"] } = {
+    inject: Injector["inject"];
+  },
+  TPlugin extends PluginHandler<Command, TContext, any> = PluginHandler<
+    Command,
+    TContext,
+    unknown
+  >,
 > {
-  protected inject: Injector["inject"];
-  protected context: TContext;
-
-  public commandsHandlers: Map<
+  private handlers = new Map<
     string,
-    CommandHandler<TContext>
-  > = new Map();
-  public commandHandlerConstructors: Map<
-    string,
-    CommandHandlerConstructor<TContext>
-  > = new Map();
+    (command: Command, context: TContext) => unknown
+  >();
+  private plugin?: TPlugin;
 
   constructor(
-    inject: Injector["inject"],
-    options?: { context?: TContext },
+    private inject: Injector["inject"],
+    options?: CommandBusOptions<TContext, TPlugin>,
   ) {
-    this.inject = inject;
-    this.context = options?.context || ({ inject } as TContext);
+    this.plugin = options?.plugin;
+    this.context = options?.context || { inject } as TContext;
   }
 
-  public handler<
-    C extends Command,
-    This extends CommandInstance<TContext, C>,
-    Args extends unknown[],
-    HandlerArgs extends unknown[],
-    Target extends new (...args: HandlerArgs) => This,
-  >(
-    command: new (...args: Args) => C,
-  ): (
-    target: Target,
-    context?: ClassDecoratorContext<new (...args: HandlerArgs) => This>,
-  ) => void {
-    return (target: Type<unknown>) => {
-      this.commandHandlerConstructors.set(command.name, target as any);
-    };
-  }
+  private context: TContext;
 
-  public bind<
-    C extends Command,
-    Q extends CommandHandler<TContext, C>,
-  >(
+  register<C extends Command>(
     command: Type<C>,
-    handler: Q,
+    handler: (
+      command: C,
+      context: TContext,
+    ) =>
+      | (ReturnType<TPlugin> extends never ? C[COMMAND_RETURN]
+        : ReturnTypeMapper<ReturnType<TPlugin>, C[COMMAND_RETURN]>)
+      | C[COMMAND_RETURN],
   ) {
-    this.commandsHandlers.set(command.name, handler);
+    this.handlers.set(command.name, handler as any);
   }
 
-  public execute<C extends Command>(
+  execute<C extends Command>(
     command: C,
-    isVoid = false,
-  ): C[COMMAND_RETURN] {
-    if (command.constructor.name === "Object") {
-      throw new Error("command must be a Command class instance");
-    }
-    let handler = this.commandsHandlers.get(
-      command.constructor.name,
-    );
+  ): ReturnType<TPlugin> extends never ? C[COMMAND_RETURN]
+    : ReturnTypeMapper<ReturnType<TPlugin>, C[COMMAND_RETURN]> {
+    const handler = this.handlers.get(command.constructor.name);
 
-    if (handler === undefined) {
-      const handlerConstructor = this.commandHandlerConstructors.get(
-        command.constructor.name,
-      );
-
-      if (handlerConstructor) {
-        const handlerInstance = this.inject(
-          handlerConstructor,
-        );
-
-        if (handlerInstance?.execute) {
-          handler = handlerInstance.execute.bind(handlerInstance);
-        }
-      }
+    if (this.plugin) {
+      return this.plugin(command, this.context, handler) as any;
     }
 
     if (!handler) {
-      throw new Error(
-        `Command handler for ${command.constructor.name} not found`,
-      );
+      throw new Error(`No handler registered for ${command.constructor.name}`);
     }
-    if (isVoid) {
-      handler(command, this.context);
-      return null;
-    }
-    return handler(command, this.context);
+
+    const baseExecution = () => handler(command, this.context);
+
+    return baseExecution() as any;
   }
 }
