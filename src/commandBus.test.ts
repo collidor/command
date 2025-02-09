@@ -1,6 +1,11 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert";
 import { Command } from "./commandModel.ts";
-import { CommandBus, CommandBusContext } from "./commandBus.ts";
+import {
+  AsyncPlugin,
+  CommandBus,
+  CommandBusContext,
+  CommandHandler,
+} from "./commandBus.ts";
 import { Injector } from "@collidor/injector";
 
 class ExampleCommand extends Command<number> {
@@ -58,7 +63,12 @@ Deno.test("commandBus - should return null if execute is called with isVoid true
 
   commandBus.bind(ExampleCommand, (command) => command.value);
 
-  assertEquals(commandBus.execute(new ExampleCommand(42), true), null);
+  assertEquals(
+    commandBus.execute(new ExampleCommand(42), {
+      isVoid: true,
+    }),
+    null,
+  );
 });
 
 Deno.test("commandBus - should bind and run class handler with context", () => {
@@ -69,7 +79,10 @@ Deno.test("commandBus - should bind and run class handler with context", () => {
     custom: 100,
   } satisfies CommandBusContext & { custom: number };
 
-  const commandBus = new CommandBus(injector.inject, { context });
+  const commandBus = new CommandBus<CommandBusContext & { custom: number }>(
+    injector.inject,
+    { context },
+  );
   @commandBus.handler(ExampleCommand)
   class ExampleHandler {
     execute(
@@ -83,4 +96,43 @@ Deno.test("commandBus - should bind and run class handler with context", () => {
   injector.register(ExampleHandler, new ExampleHandler());
 
   assertEquals(commandBus.execute(new ExampleCommand(42)), 142);
+});
+
+Deno.test("commandBus - should bind and run class handler with context and an Async Plugin", async () => {
+  const injector = new Injector();
+
+  const context = {
+    inject: injector.inject,
+    custom: 100,
+  } satisfies CommandBusContext & { custom: number };
+
+  class TestAsyncPlugin
+    extends AsyncPlugin<CommandBusContext & { custom: number }> {
+    wrapHandler = async (
+      command: Command,
+      handler: CommandHandler<CommandBusContext & { custom: number }, Command>,
+    ) => {
+      return await handler(command, context);
+    };
+  }
+
+  const commandBus = new CommandBus<
+    CommandBusContext & { custom: number },
+    TestAsyncPlugin
+  >(
+    injector.inject,
+    { context, plugin: new TestAsyncPlugin() },
+  );
+
+  commandBus.bind(
+    ExampleCommand,
+    (command, context) => {
+      return Promise.resolve(command.value + context.custom);
+    },
+  );
+
+  assertEquals(
+    await commandBus.execute(new ExampleCommand(42)),
+    142,
+  );
 });
