@@ -2,184 +2,86 @@
 import type { Injector, Type } from "@collidor/injector";
 import type { Command, COMMAND_RETURN } from "./commandModel.ts";
 
-export interface CommandBusContext {
-  inject: Injector["inject"];
-}
-
-export type CommandHandler<
-  TContext extends CommandBusContext = CommandBusContext,
-  BaseCommand extends Command = Command,
-  TPlugin extends
-    | SyncPlugin<TContext>
-    | AsyncPlugin<TContext>
-    | StreamPlugin<TContext> = SyncPlugin<TContext>,
-> = (
-  arg: BaseCommand,
-  context: TContext,
-) => PluginReturnType<TContext, TPlugin, BaseCommand[COMMAND_RETURN]>;
-
-export type CommandInstance<
-  TContext extends CommandBusContext = CommandBusContext,
-  BaseCommand extends Command = Command,
-  TPlugin extends
-    | SyncPlugin<TContext>
-    | AsyncPlugin<TContext>
-    | StreamPlugin<TContext> = SyncPlugin<TContext>,
-> = { execute: CommandHandler<TContext, BaseCommand, TPlugin> };
-
-export type CommandHandlerConstructor<
-  TContext extends CommandBusContext = CommandBusContext,
-  BaseCommand extends Command = Command,
-  TPlugin extends
-    | SyncPlugin<TContext>
-    | AsyncPlugin<TContext>
-    | StreamPlugin<TContext> = SyncPlugin<TContext>,
-> = Type<CommandInstance<TContext, BaseCommand, TPlugin>>;
-
-// Define Plugin types and return type transformation
-type PluginHandler<
-  C extends Command,
-  TContext extends CommandBusContext = CommandBusContext,
-  R = C[COMMAND_RETURN],
-> = (
+type PluginHandler<C extends Command, TContext, R = C[COMMAND_RETURN]> = (
   command: C,
-  handler: CommandHandler<CommandBusContext, C>,
   context: TContext,
+  handler?: (command: C, context: TContext) => C[COMMAND_RETURN],
 ) => R;
 
-export abstract class SyncPlugin<
-  TContext extends CommandBusContext = CommandBusContext,
+interface CommandBusOptions<
+  TContext,
+  TPlugin extends PluginHandler<Command, TContext, any>,
 > {
-  abstract wrapHandler: PluginHandler<Command, TContext>;
+  context?: TContext;
+  plugin?: TPlugin;
 }
 
-export abstract class AsyncPlugin<
-  TContext extends CommandBusContext = CommandBusContext,
-> {
-  abstract wrapHandler: PluginHandler<
-    Command,
-    TContext,
-    Promise<Command[COMMAND_RETURN]>
-  >;
-}
-
-export abstract class StreamPlugin<
-  TContext extends CommandBusContext = CommandBusContext,
-> {
-  abstract wrapHandler: PluginHandler<
-    Command,
-    TContext,
-    AsyncIterable<Command[COMMAND_RETURN]>
-  >;
-}
-
-type CommandBusPlugin<TContext extends CommandBusContext = CommandBusContext> =
-  | SyncPlugin<TContext>
-  | AsyncPlugin<TContext>
-  | StreamPlugin<TContext>;
-
-type PluginReturnType<
-  TContext extends CommandBusContext,
-  TPlugin extends CommandBusPlugin<TContext>,
-  R,
-> = TPlugin extends AsyncPlugin ? Promise<R>
-  : TPlugin extends StreamPlugin ? AsyncIterable<R>
-  : R;
+type ReturnTypeMapper<T, R> = T extends Promise<any> ? Promise<R>
+  : T extends Iterable<any> ? Iterable<R>
+  : T extends Iterator<any> ? Iterable<R>
+  : T extends IterableIterator<any> ? Iterable<R>
+  : T extends AsyncIterable<any> ? Iterable<R>
+  : T extends AsyncIterator<any> ? Iterable<R>
+  : T extends Generator<any> ? Iterable<R>
+  : T extends ReadableStream<any> ? Iterable<R>
+  : T extends ReadableStreamDefaultReader<any> ? Iterable<R>
+  : T;
 
 export class CommandBus<
-  TContext extends CommandBusContext = CommandBusContext,
-  TPlugin extends CommandBusPlugin<TContext> = SyncPlugin<TContext>,
+  TContext extends { inject: Injector["inject"] } = {
+    inject: Injector["inject"];
+  },
+  TPlugin extends PluginHandler<Command, TContext, any> = PluginHandler<
+    Command,
+    TContext,
+    unknown
+  >,
 > {
-  protected inject: Injector["inject"];
-  protected context: TContext;
-  protected plugin?: TPlugin;
-
-  public commandsHandlers: Map<string, CommandHandler<TContext>> = new Map();
-  public commandHandlerConstructors: Map<
+  private handlers = new Map<
     string,
-    CommandHandlerConstructor<TContext>
-  > = new Map();
+    (command: Command, context: TContext) => unknown
+  >();
+  private plugin?: TPlugin;
 
   constructor(
-    inject: Injector["inject"],
-    options?: { context?: TContext; plugin?: TPlugin },
+    private inject: Injector["inject"],
+    options?: CommandBusOptions<TContext, TPlugin>,
   ) {
-    this.inject = inject;
-    this.context = options?.context || ({ inject } as TContext);
     this.plugin = options?.plugin;
+    this.context = options?.context || { inject } as TContext;
   }
 
-  public handler<
-    C extends Command,
-    This extends { execute: CommandHandler<TContext, C, TPlugin> },
-    Args extends unknown[],
-    HandlerArgs extends unknown[],
-    Target extends new (...args: HandlerArgs) => This,
-  >(
-    command: new (...args: Args) => C,
-  ): (
-    target: Target,
-    context?: ClassDecoratorContext<new (...args: HandlerArgs) => This>,
-  ) => void {
-    return (target: Type<unknown>) => {
-      this.commandHandlerConstructors.set(command.name, target as any);
-    };
-  }
+  private context: TContext;
 
-  public bind<
-    C extends Command,
-    Q extends CommandHandler<TContext, C, TPlugin>,
-  >(
+  register<C extends Command>(
     command: Type<C>,
-    handler: Q,
+    handler: (
+      command: C,
+      context: TContext,
+    ) =>
+      | (ReturnType<TPlugin> extends never ? C[COMMAND_RETURN]
+        : ReturnTypeMapper<ReturnType<TPlugin>, C[COMMAND_RETURN]>)
+      | C[COMMAND_RETURN],
   ) {
-    this.commandsHandlers.set(command.name, handler as any);
+    this.handlers.set(command.name, handler as any);
   }
 
-  public execute<C extends Command>(
+  execute<C extends Command>(
     command: C,
-    options?: { isVoid?: boolean; context?: TContext },
-  ): PluginReturnType<TContext, TPlugin, C[COMMAND_RETURN]> {
-    if (command.constructor.name === "Object") {
-      throw new Error("command must be a Command class instance");
-    }
-    let handler = this.commandsHandlers.get(command.constructor.name);
-
-    if (handler === undefined) {
-      const handlerConstructor = this.commandHandlerConstructors.get(
-        command.constructor.name,
-      );
-
-      if (handlerConstructor) {
-        const handlerInstance = this.inject(handlerConstructor);
-
-        if (handlerInstance?.execute) {
-          handler = handlerInstance.execute.bind(handlerInstance);
-        }
-      }
-    }
+  ): ReturnType<TPlugin> extends never ? C[COMMAND_RETURN]
+    : ReturnTypeMapper<ReturnType<TPlugin>, C[COMMAND_RETURN]> {
+    const handler = this.handlers.get(command.constructor.name);
 
     if (this.plugin) {
-      return (this.plugin!).wrapHandler(
-        command,
-        handler as any,
-        (options?.context as TContext) || this.context,
-      ) as PluginReturnType<TContext, TPlugin, C[COMMAND_RETURN]>;
+      return this.plugin(command, this.context, handler) as any;
     }
 
     if (!handler) {
-      throw new Error(
-        `Command handler for ${command.constructor.name} not found`,
-      );
+      throw new Error(`No handler registered for ${command.constructor.name}`);
     }
 
-    // Apply plugin's wrapHandler
-    const result = handler(command, options?.context || this.context);
+    const baseExecution = () => handler(command, this.context);
 
-    if (options?.isVoid) {
-      return null as PluginReturnType<TContext, TPlugin, C[COMMAND_RETURN]>;
-    }
-
-    return result as PluginReturnType<TContext, TPlugin, C[COMMAND_RETURN]>;
+    return baseExecution() as any;
   }
 }
