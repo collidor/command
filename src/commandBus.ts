@@ -11,7 +11,7 @@ export type PluginHandler<C extends Command, TContext, R = C[COMMAND_RETURN]> =
 
 export interface CommandBusOptions<
   TContext,
-  TPlugin extends PluginHandler<Command, TContext, any> | never = never,
+  TPlugin extends PluginHandler<Command, TContext, any> | undefined = undefined,
 > {
   context?: TContext;
   plugin?: TPlugin;
@@ -30,7 +30,12 @@ type ReturnTypeMapper<T, R> = T extends Promise<any> ? Promise<R>
 
 export class CommandBus<
   TContext extends Record<string, any>,
-  TPlugin extends PluginHandler<Command, TContext, any> | never,
+  TPlugin extends PluginHandler<Command, TContext, any> | undefined =
+    PluginHandler<Command, TContext, any>,
+  Options extends CommandBusOptions<TContext, TPlugin> = CommandBusOptions<
+    TContext,
+    TPlugin
+  >,
 > {
   private handlers = new Map<
     string,
@@ -39,7 +44,7 @@ export class CommandBus<
   private plugin?: TPlugin;
 
   constructor(
-    options?: CommandBusOptions<TContext, TPlugin>,
+    options?: Options,
   ) {
     this.plugin = options?.plugin;
     this.context = options?.context || {} as TContext;
@@ -52,15 +57,14 @@ export class CommandBus<
     handler: (
       command: C,
       context: TContext,
-    ) => TPlugin extends never ? C[COMMAND_RETURN]
-      :
-        | (ReturnType<(TPlugin & ((...args: any) => any))> extends never
-          ? C[COMMAND_RETURN]
-          : ReturnTypeMapper<
-            ReturnType<(TPlugin & ((...args: any) => any))>,
-            C[COMMAND_RETURN]
-          >)
-        | C[COMMAND_RETURN],
+    ) =>
+      | (ReturnType<(TPlugin & ((...args: any) => any))> extends undefined
+        ? C[COMMAND_RETURN]
+        : ReturnTypeMapper<
+          ReturnType<(TPlugin & ((...args: any) => any))>,
+          C[COMMAND_RETURN]
+        >)
+      | C[COMMAND_RETURN],
   ) {
     this.handlers.set(command.name, handler as any);
   }
@@ -68,9 +72,9 @@ export class CommandBus<
   execute<C extends Command>(
     command: C,
     context?: TContext,
-  ): TPlugin extends never ? C[COMMAND_RETURN]
+  ): TPlugin extends undefined ? C[COMMAND_RETURN]
     :
-      | (ReturnType<(TPlugin & ((...args: any) => any))> extends never
+      | (ReturnType<(TPlugin & ((...args: any) => any))> extends undefined
         ? C[COMMAND_RETURN]
         : ReturnTypeMapper<
           ReturnType<(TPlugin & ((...args: any) => any))>,

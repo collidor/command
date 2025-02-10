@@ -36,8 +36,8 @@ Deno.test("commandBus - should bind and run class handler with context", () => {
     custom: 100,
   };
 
-  const commandBus = new CommandBus(
-    { context },
+  const commandBus = new CommandBus<typeof context>(
+    { context, plugin: (command, c, h) => h?.(command, c) },
   );
 
   commandBus.register(ExampleCommand, (command, context) => {
