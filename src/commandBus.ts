@@ -11,7 +11,7 @@ export type PluginHandler<C extends Command, TContext, R = C[COMMAND_RETURN]> =
 
 export interface CommandBusOptions<
   TContext,
-  TPlugin extends PluginHandler<Command, TContext, any>,
+  TPlugin extends PluginHandler<Command, TContext, any> | never = never,
 > {
   context?: TContext;
   plugin?: TPlugin;
@@ -29,12 +29,8 @@ type ReturnTypeMapper<T, R> = T extends Promise<any> ? Promise<R>
   : T;
 
 export class CommandBus<
-  TContext extends Record<string, any> = Record<string, any>,
-  TPlugin extends PluginHandler<Command, TContext, any> = PluginHandler<
-    Command,
-    TContext,
-    unknown
-  >,
+  TContext extends Record<string, any>,
+  TPlugin extends PluginHandler<Command, TContext, any> | never,
 > {
   private handlers = new Map<
     string,
@@ -56,28 +52,41 @@ export class CommandBus<
     handler: (
       command: C,
       context: TContext,
-    ) =>
-      | (ReturnType<TPlugin> extends never ? C[COMMAND_RETURN]
-        : ReturnTypeMapper<ReturnType<TPlugin>, C[COMMAND_RETURN]>)
-      | C[COMMAND_RETURN],
+    ) => TPlugin extends never ? C[COMMAND_RETURN]
+      :
+        | (ReturnType<(TPlugin & ((...args: any) => any))> extends never
+          ? C[COMMAND_RETURN]
+          : ReturnTypeMapper<
+            ReturnType<(TPlugin & ((...args: any) => any))>,
+            C[COMMAND_RETURN]
+          >)
+        | C[COMMAND_RETURN],
   ) {
     this.handlers.set(command.name, handler as any);
   }
 
   execute<C extends Command>(
     command: C,
-  ): ReturnType<TPlugin> extends never ? C[COMMAND_RETURN]
-    : ReturnTypeMapper<ReturnType<TPlugin>, C[COMMAND_RETURN]> {
+    context?: TContext,
+  ): TPlugin extends never ? C[COMMAND_RETURN]
+    :
+      | (ReturnType<(TPlugin & ((...args: any) => any))> extends never
+        ? C[COMMAND_RETURN]
+        : ReturnTypeMapper<
+          ReturnType<(TPlugin & ((...args: any) => any))>,
+          C[COMMAND_RETURN]
+        >)
+      | C[COMMAND_RETURN] {
     const handler = this.handlers.get(command.constructor.name);
 
     if (this.plugin) {
-      return this.plugin(command, this.context, handler) as any;
+      return this.plugin(command, context ?? this.context, handler) as any;
     }
 
     if (!handler) {
       throw new Error(`No handler registered for ${command.constructor.name}`);
     }
 
-    return handler(command, this.context) as any;
+    return handler(command, context ?? this.context) as any;
   }
 }

@@ -1,10 +1,10 @@
 {
     "name": "@collidor/command",
-    "version": "3.0.2",
+    "version": "3.0.3",
     "description": "A small library to create, register and execute commands.",
     "repository": {
         "type": "git",
-        "url": "https://github.com/collidor/command"
+        "url": "git+https://github.com/collidor/command.git"
     },
     "type": "module",
     "main": "dist/main.cjs",
@@ -22,7 +22,6 @@
     "author": "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
     "license": "MIT",
     "devDependencies": {
-        "@swc/core": "^1.10.14",
         "tsup": "^8.3.6",
         "typescript": "^5.7.3"
     }

@@ -68,3 +68,19 @@ Deno.test("commandBus - should register and run handler with context and an Asyn
     142,
   );
 });
+
+Deno.test("commandBus - should register and run handler with custom context", () => {
+  const context = {
+    custom: 100,
+  };
+
+  const commandBus = new CommandBus({
+    context,
+  });
+
+  commandBus.register(ExampleCommand, (command, context) => {
+    return command.value + context.custom;
+  });
+
+  assertEquals(commandBus.execute(new ExampleCommand(42), { custom: 12 }), 54);
+});
