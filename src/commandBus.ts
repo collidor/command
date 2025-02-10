@@ -17,7 +17,8 @@ export interface CommandBusOptions<
   plugin?: TPlugin;
 }
 
-type ReturnTypeMapper<T, R> = T extends Promise<any> ? Promise<R>
+type ReturnTypeMapper<T, R> = T extends unknown ? R
+  : T extends Promise<any> ? Promise<R>
   : T extends Iterable<any> ? Iterable<R>
   : T extends Iterator<any> ? Iterable<R>
   : T extends IterableIterator<any> ? Iterable<R>
@@ -26,16 +27,12 @@ type ReturnTypeMapper<T, R> = T extends Promise<any> ? Promise<R>
   : T extends Generator<any> ? Iterable<R>
   : T extends ReadableStream<any> ? Iterable<R>
   : T extends ReadableStreamDefaultReader<any> ? Iterable<R>
-  : T;
+  : R;
 
 export class CommandBus<
   TContext extends Record<string, any>,
   TPlugin extends PluginHandler<Command, TContext, any> | undefined =
     PluginHandler<Command, TContext, any>,
-  Options extends CommandBusOptions<TContext, TPlugin> = CommandBusOptions<
-    TContext,
-    TPlugin
-  >,
 > {
   private handlers = new Map<
     string,
@@ -44,7 +41,10 @@ export class CommandBus<
   private plugin?: TPlugin;
 
   constructor(
-    options?: Options,
+    options?: {
+      context?: TContext;
+      plugin?: TPlugin;
+    },
   ) {
     this.plugin = options?.plugin;
     this.context = options?.context || {} as TContext;
@@ -58,12 +58,11 @@ export class CommandBus<
       command: C,
       context: TContext,
     ) =>
-      | (ReturnType<(TPlugin & ((...args: any) => any))> extends undefined
-        ? C[COMMAND_RETURN]
-        : ReturnTypeMapper<
-          ReturnType<(TPlugin & ((...args: any) => any))>,
+      | (TPlugin extends (...args: any) => any ? ReturnTypeMapper<
+          ReturnType<TPlugin>,
           C[COMMAND_RETURN]
-        >)
+        >
+        : C[COMMAND_RETURN])
       | C[COMMAND_RETURN],
   ) {
     this.handlers.set(command.name, handler as any);
@@ -72,15 +71,11 @@ export class CommandBus<
   execute<C extends Command>(
     command: C,
     context?: TContext,
-  ): TPlugin extends undefined ? C[COMMAND_RETURN]
-    :
-      | (ReturnType<(TPlugin & ((...args: any) => any))> extends undefined
-        ? C[COMMAND_RETURN]
-        : ReturnTypeMapper<
-          ReturnType<(TPlugin & ((...args: any) => any))>,
-          C[COMMAND_RETURN]
-        >)
-      | C[COMMAND_RETURN] {
+  ): TPlugin extends (...args: any) => any ? ReturnTypeMapper<
+      ReturnType<TPlugin>,
+      C[COMMAND_RETURN]
+    >
+    : C[COMMAND_RETURN] {
     const handler = this.handlers.get(command.constructor.name);
 
     if (this.plugin) {
