@@ -5,7 +5,6 @@
     "jsr:@std/assert@*": "1.0.11",
     "jsr:@std/assert@1": "1.0.11",
     "jsr:@std/internal@^1.0.5": "1.0.5",
-    "npm:@collidor/injector@^2.0.2": "2.0.2",
     "npm:@swc/core@^1.10.14": "1.10.15",
     "npm:tsup@^8.3.6": "8.3.6_typescript@5.7.3_esbuild@0.24.0",
     "npm:typescript@^5.7.3": "5.7.3"
@@ -25,9 +24,6 @@
     }
   },
   "npm": {
-    "@collidor/injector@2.0.2": {
-      "integrity": "sha512-tL6u5La0sZo39UqogG58kgX1S0BHdYR6ufE0NIlhxu/HytFCElWL8d7YBR5xLGxtyKHwqp4kwLZbT8wTVwAJnA=="
-    },
     "@esbuild/aix-ppc64@0.24.0": {
       "integrity": "sha512-WtKdFM7ls47zkKHFVzMz8opM7LkcsIp9amDUBIAWirg70RM71WRSjdILPsY5Uv1D42ZpUfaPILDlfactHgsRkw=="
     },
@@ -662,7 +658,6 @@
     ],
     "packageJson": {
       "dependencies": [
-        "npm:@collidor/injector@^2.0.2",
         "npm:@swc/core@^1.10.14",
         "npm:tsup@^8.3.6",
         "npm:typescript@^5.7.3"

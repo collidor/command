@@ -13,7 +13,7 @@ A lightweight, type-safe command pattern implementation with plugin support:
 ## Installation
 
 ```bash
-npm install your-package-name
+npm install @collidor/command
 ```
 
 ## Features
