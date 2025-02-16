@@ -27,7 +27,7 @@ npm install @collidor/command
 ## Basic Usage
 
 ```typescript
-import { CommandBus } from "your-package-name";
+import { CommandBus } from "@collidor/command";
 
 // 1. Define command
 class CreateUser extends Command<{ id: string }> {}

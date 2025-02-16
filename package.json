@@ -1,6 +1,6 @@
 {
     "name": "@collidor/command",
-    "version": "3.0.5",
+    "version": "4.0.0",
     "description": "A small library to create, register and execute commands.",
     "repository": {
         "type": "git",
@@ -22,6 +22,7 @@
     "author": "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
     "license": "MIT",
     "devDependencies": {
+        "@collidor/event": "2.0.0",
         "tsup": "^8.3.6",
         "typescript": "^5.7.3"
     }

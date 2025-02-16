@@ -34,10 +34,11 @@ export class CommandBus<
   TPlugin extends PluginHandler<Command, TContext, any> | undefined =
     PluginHandler<Command, TContext, any>,
 > {
-  private handlers = new Map<
+  public handlers = new Map<
     string,
     (command: Command, context: TContext) => unknown
   >();
+  public commandConstructor = new Map<string, Type<Command>>();
   private plugin?: TPlugin;
 
   constructor(
@@ -65,6 +66,7 @@ export class CommandBus<
         : C[COMMAND_RETURN])
       | C[COMMAND_RETURN],
   ) {
+    this.commandConstructor.set(command.name, command);
     this.handlers.set(command.name, handler as any);
   }
 

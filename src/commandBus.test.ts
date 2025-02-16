@@ -2,15 +2,12 @@ import { assertEquals, assertThrows } from "jsr:@std/assert";
 import { Command } from "./commandModel.ts";
 import { CommandBus } from "./commandBus.ts";
 
-class ExampleCommand extends Command<number> {
-  constructor(public readonly value: number) {
-    super();
-  }
+class ExampleCommand extends Command<number, number> {
 }
 
 Deno.test("commandBus - should bind and run function handler", () => {
   const commandBus = new CommandBus();
-  commandBus.register(ExampleCommand, (command) => command.value);
+  commandBus.register(ExampleCommand, (command) => command.data);
 
   assertEquals(commandBus.execute(new ExampleCommand(42)), 42);
 });
@@ -41,7 +38,7 @@ Deno.test("commandBus - should bind and run class handler with context", () => {
   );
 
   commandBus.register(ExampleCommand, (command, context) => {
-    return command.value + context.custom;
+    return command.data + context.custom;
   });
 
   assertEquals(commandBus.execute(new ExampleCommand(42)), 142);
@@ -60,7 +57,7 @@ Deno.test("commandBus - should register and run handler with context and an Asyn
   });
 
   commandBus.register(ExampleCommand, (command, context) => {
-    return command.value + context.custom;
+    return command.data + context.custom;
   });
 
   assertEquals(
@@ -79,7 +76,7 @@ Deno.test("commandBus - should register and run handler with custom context", ()
   });
 
   commandBus.register(ExampleCommand, (command, context) => {
-    return command.value + context.custom;
+    return command.data + context.custom;
   });
 
   assertEquals(commandBus.execute(new ExampleCommand(42), { custom: 12 }), 54);
