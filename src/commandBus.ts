@@ -34,11 +34,17 @@ export class CommandBus<
   TPlugin extends PluginHandler<Command, TContext, any> | undefined =
     PluginHandler<Command, TContext, any>,
 > {
-  public handlers = new Map<
+  public handlers: Map<
+    string,
+    (command: Command, context: TContext) => unknown
+  > = new Map<
     string,
     (command: Command, context: TContext) => unknown
   >();
-  public commandConstructor = new Map<string, Type<Command>>();
+  public commandConstructor: Map<string, Type<Command>> = new Map<
+    string,
+    Type<Command>
+  >();
   private plugin?: TPlugin;
 
   constructor(
