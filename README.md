@@ -30,7 +30,7 @@ npm install @collidor/command
 import { CommandBus } from "@collidor/command";
 
 // 1. Define command
-class CreateUser extends Command<{ id: string }> {}
+class CreateUser extends Command<{name: string}, { id: string }> {}
 
 // 2. Create bus
 const bus = new CommandBus();
