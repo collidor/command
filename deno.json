@@ -1,6 +1,6 @@
 {
     "name": "@collidor/command",
-    "version": "4.0.0",
+    "version": "4.2.0",
     "license": "MIT",
     "exports": "./src/main.ts",
     "publish": {
@@ -20,7 +20,9 @@
     },
     "imports": {
         "@std/assert": "jsr:@std/assert@1",
-        "@collidor/injector": "jsr:@collidor/injector@^2.0.0"
+        "@std/testing": "jsr:@std/testing@1",
+        "@collidor/injector": "jsr:@collidor/injector@^2.0.0",
+        "@collidor/event": "jsr:@collidor/event@^3.1.2"
     },
     "lint": {
         "rules": {
@@ -34,8 +36,6 @@
             "ESNext",
             "deno.window"
         ],
-        "emitDecoratorMetadata": true,
-        "experimentalDecorators": true,
         "noUncheckedIndexedAccess": true,
         "strict": true
     },
