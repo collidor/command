@@ -22,9 +22,9 @@
     "author": "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
     "license": "MIT",
     "devDependencies": {
-        "@collidor/event": "^3.1.2",
+        "@collidor/event": "^3.1.3",
         "tsup": "^8.4.0",
-        "typescript": "^5.7.3"
+        "typescript": "^5.8.2"
     },
     "peerDependencies": {
         "@collidor/event": "^3"

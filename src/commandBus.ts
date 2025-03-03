@@ -67,7 +67,7 @@ export class CommandBus<
     (command: Command, context: TContext) => unknown
   > = new Map();
 
-  public handlersStreamHandlers: Map<
+  public streamHandlers: Map<
     string,
     (
       command: Command,
@@ -75,6 +75,15 @@ export class CommandBus<
       next: (data: Command[COMMAND_RETURN], done: boolean, error?: any) => void,
     ) => () => void
   > = new Map();
+
+  private asyncStreamHandlers: Map<
+    string,
+    (
+      command: Command,
+      context: TContext,
+    ) => AsyncIterable<Command[COMMAND_RETURN]>
+  > = new Map();
+
   public commandConstructor: Map<string, Type<Command>> = new Map();
   private plugin?: TPlugin;
 
@@ -144,18 +153,34 @@ export class CommandBus<
     context?: TContext,
   ): () => void {
     if (!this.plugin?.streamHandler) {
-      const handler = this.handlersStreamHandlers.get(command.constructor.name);
+      const handler = this.streamHandlers.get(command.constructor.name);
       if (!handler) {
         throw new Error(
           `No stream plugin registered for ${command.constructor.name}`,
         );
       }
 
-      return handler(
+      let unsubscribed = false;
+      const unsubscribe = handler(
         command,
         context ?? this.context,
-        callback,
+        (data, done, error) => {
+          if (unsubscribed) {
+            return;
+          }
+
+          if (error) {
+            callback(data, done, error);
+            return;
+          }
+
+          callback(data, done);
+          if (done) {
+            unsubscribed = true;
+          }
+        },
       );
+      return unsubscribe;
     }
 
     return this.plugin.streamHandler(
@@ -163,6 +188,74 @@ export class CommandBus<
       context ?? this.context,
       callback,
     );
+  }
+
+  async *streamAsync<C extends Command>(
+    command: C,
+    context?: TContext,
+  ): AsyncGenerator<C[COMMAND_RETURN], void, unknown> {
+    const asyncHandler = this.asyncStreamHandlers.get(command.constructor.name);
+    if (asyncHandler) {
+      for await (
+        const event of asyncHandler(command, context ?? this.context)
+      ) {
+        yield event;
+      }
+      return;
+    }
+
+    const queue: {
+      value: C[COMMAND_RETURN];
+      done: boolean;
+      error?: any;
+    }[] = [];
+    let resolveNext:
+      | ((result: {
+        value: C[COMMAND_RETURN];
+        done: boolean;
+        error?: any;
+      }) => void)
+      | null = null;
+    let finished = false;
+
+    // Subscribe to the stream.
+    const unsubscribe = this.stream(
+      command,
+      (data, done, error) => {
+        const item = { value: data, done, error };
+        if (resolveNext) {
+          resolveNext(item);
+          resolveNext = null;
+        } else {
+          queue.push(item);
+        }
+        if (done) {
+          finished = true;
+        }
+      },
+      context,
+    );
+
+    try {
+      while (!finished || queue.length > 0) {
+        const item = queue.length > 0 ? queue.shift()! : await new Promise<{
+          value: C[COMMAND_RETURN];
+          done: boolean;
+          error?: any;
+        }>((resolve) => {
+          resolveNext = resolve;
+        });
+        if (item.error) {
+          throw item.error;
+        }
+        yield item.value;
+        if (item.done) {
+          break;
+        }
+      }
+    } finally {
+      unsubscribe();
+    }
   }
 
   registerStream<C extends Command>(
@@ -174,7 +267,25 @@ export class CommandBus<
     ) => () => void,
   ) {
     this.commandConstructor.set(command.name, command);
-    this.handlersStreamHandlers.set(command.name, handler as any);
+    this.streamHandlers.set(command.name, handler as any);
+
+    if (this.plugin?.register) {
+      this.plugin.register(command);
+    }
+  }
+
+  /**
+   * Registers a stream handler that returns an AsyncIterable.
+   */
+  registerStreamAsync<C extends Command>(
+    command: Type<C>,
+    handler: (
+      command: C,
+      context: TContext,
+    ) => AsyncIterable<C[COMMAND_RETURN]>,
+  ) {
+    this.commandConstructor.set(command.name, command);
+    this.asyncStreamHandlers.set(command.name, handler as any);
 
     if (this.plugin?.register) {
       this.plugin.register(command);
