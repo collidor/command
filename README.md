@@ -120,6 +120,7 @@ for await (const result of streamBus.execute(new CreateUser())) {
 }
 ```
 
+
 ## API Documentation
 
 `CommandBus<TContext, TPlugin>`
@@ -319,6 +320,63 @@ const clientPlugin = httpClientPlugin("http://api.example.com", {
 ```
 
 By integrating the HTTP client and server plugins, you can easily connect your command handlers with remote HTTP services while still enjoying all the benefits of type safety and plugin extensibility offered by the Command library.
+
+### PortChannel Plugin
+
+The new PortChannel Plugin leverages the underlying PortChannel from @collidor/event to bridge command execution across different environments (for example, between a server and a client). It provides:
+
+* Buffering of Events:
+
+    If an event is published before any subscriber connects, the plugin buffers the event and flushes it immediately when a subscriber appears.
+
+* Maximum Buffer Timeout:
+
+    Buffered events are automatically discarded after a configurable timeout (defaulting to 5000 ms) to prevent memory leaks.
+
+* Inter-Process Communication:
+
+    Allows commands to be dispatched and responses received via a MessagePort, making it ideal for scenarios like web workers, iframes, or other multi-context environments.
+
+**Example Usage:**
+
+```ts
+import { CommandBus, Command, PortChannelPlugin } from "@collidor/command";
+
+// Define a command
+class CreateUser extends Command<{ name: string }, { id: string }> {}
+
+// Create an instance of the PortChannel Plugin.
+// Optionally, configure the buffer timeout (in milliseconds)
+const portPlugin = new PortChannelPlugin({ bufferTimeout: 5000 });
+
+// Create a CommandBus with the PortChannel Plugin installed.
+const bus = new CommandBus({ plugin: portPlugin });
+
+// Register a command handler on the bus.
+bus.register(CreateUser, (command, context) => ({
+  id: "user-" + Math.random().toString(36).slice(2),
+}));
+
+// Dispatch a command via the PortChannel Plugin.
+// The plugin buffers events until a subscriber (e.g. a connected MessagePort) attaches.
+const user = await bus.execute(new CreateUser({ name: "Alice" }));
+console.log(user); // e.g. { id: "user-..." }
+
+```
+
+**Notes:**
+
+* Buffering Behavior:
+
+    Commands or events dispatched before a subscriber connects will be stored in a buffer and then flushed as soon as a subscriber (via addPortSubscription) attaches.
+
+* Timeout Control:
+
+    The maximum time an event remains buffered is controlled by the bufferTimeout option.
+
+* Interoperability:
+
+    This plugin is particularly useful in scenarios where the server and client reside in separate execution contexts (e.g., web workers or iframes), ensuring that events are not lost during initial connection delays.
 
 ## Type Transformations
 

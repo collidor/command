@@ -7,8 +7,14 @@ export {
   type StreamPluginHandler,
   type Type,
 } from "./commandBus.ts";
+
 export {
   httpClientPlugin,
   httpServerPlugin,
   type Serializer,
 } from "./plugins/httpPlugin.ts";
+
+export {
+  PortChannelPlugin,
+  type PortChannelPluginOptions,
+} from "./plugins/portChannelPlugin.ts";

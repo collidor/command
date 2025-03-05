@@ -25,18 +25,24 @@ export type CommandBusPlugin<
   C extends Command,
   TContext extends ContextType = ContextType,
   R = undefined,
-> = R extends undefined ? {
-    install?: (commandBus: CommandBus<TContext, any>) => void;
-    handler?: PluginHandler<C, TContext, R>;
+> =
+  & {
+    install?: (
+      commandBus: CommandBus<TContext, any>,
+      context: TContext,
+    ) => void;
     streamHandler?: StreamPluginHandler<C, TContext>;
     register?: (Command: Type<C>) => void;
+    registerStream?: (
+      Command: Type<C>,
+    ) => void;
   }
-  : {
-    install?: (commandBus: CommandBus<TContext, any>) => void;
-    handler: PluginHandler<C, TContext, R>;
-    streamHandler?: StreamPluginHandler<C, TContext>;
-    register?: (Command: Type<C>) => void;
-  };
+  & (R extends undefined ? {
+      handler?: PluginHandler<C, TContext, R>;
+    }
+    : {
+      handler: PluginHandler<C, TContext, R>;
+    });
 
 export interface CommandBusOptions<
   TContext extends ContextType = ContextType,
@@ -59,8 +65,7 @@ type ReturnTypeMapper<T, R> = T extends Promise<any> ? Promise<R>
 
 export class CommandBus<
   TContext extends ContextType = ContextType,
-  TPlugin extends CommandBusPlugin<Command, TContext, any> | undefined =
-    undefined,
+  TPlugin extends CommandBusPlugin<Command, any, any> | undefined = undefined,
 > {
   public handlers: Map<
     string,
@@ -76,12 +81,12 @@ export class CommandBus<
     ) => () => void
   > = new Map();
 
-  private asyncStreamHandlers: Map<
+  public asyncStreamHandlers: Map<
     string,
     (
       command: Command,
       context: TContext,
-    ) => AsyncIterable<Command[COMMAND_RETURN]>
+    ) => AsyncIterableIterator<Command[COMMAND_RETURN]>
   > = new Map();
 
   public commandConstructor: Map<string, Type<Command>> = new Map();
@@ -94,7 +99,7 @@ export class CommandBus<
     this.plugin = options?.plugin;
 
     if (this.plugin?.install) {
-      this.plugin.install(this);
+      this.plugin.install(this, this.context);
     }
   }
 
@@ -269,8 +274,8 @@ export class CommandBus<
     this.commandConstructor.set(command.name, command);
     this.streamHandlers.set(command.name, handler as any);
 
-    if (this.plugin?.register) {
-      this.plugin.register(command);
+    if (this.plugin?.registerStream) {
+      this.plugin.registerStream(command);
     }
   }
 
@@ -287,8 +292,8 @@ export class CommandBus<
     this.commandConstructor.set(command.name, command);
     this.asyncStreamHandlers.set(command.name, handler as any);
 
-    if (this.plugin?.register) {
-      this.plugin.register(command);
+    if (this.plugin?.registerStream) {
+      this.plugin.registerStream(command);
     }
   }
 }
