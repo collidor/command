@@ -74,7 +74,7 @@ export function httpClientPlugin<
     const headersValue = parseHeaders(headers, command, context);
 
     const body = serializer.serialize(
-      command.data,
+      { data: command.data, name: command.constructor.name },
       headersValue,
     );
 

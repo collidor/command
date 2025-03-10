@@ -34,6 +34,10 @@ Deno.test("httpClientPlugin - should perform HTTP POST and return response JSON"
   assertEquals(fetchStub.calls.length, 1);
   assertEquals(fetchStub.calls[0]?.args[1]?.method, "POST");
   assertEquals(
+    JSON.parse(fetchStub.calls[0]?.args[1]?.body as string || "").name,
+    "ExampleCommand",
+  );
+  assertEquals(
     (fetchStub.calls[0]?.args[1]?.headers as Headers)?.get("Content-Type"),
     "application/json",
   );
