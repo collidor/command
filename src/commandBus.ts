@@ -199,14 +199,18 @@ export class CommandBus<
     command: C,
     context?: TContext,
   ): AsyncGenerator<C[COMMAND_RETURN], void, unknown> {
-    const asyncHandler = this.asyncStreamHandlers.get(command.constructor.name);
-    if (asyncHandler) {
-      for await (
-        const event of asyncHandler(command, context ?? this.context)
-      ) {
-        yield event;
+    if (!this.plugin?.streamHandler) {
+      const asyncHandler = this.asyncStreamHandlers.get(
+        command.constructor.name,
+      );
+      if (asyncHandler) {
+        for await (
+          const event of asyncHandler(command, context ?? this.context)
+        ) {
+          yield event;
+        }
+        return;
       }
-      return;
     }
 
     const queue: {

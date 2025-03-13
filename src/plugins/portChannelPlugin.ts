@@ -139,10 +139,11 @@ export class PortChannelPlugin extends PortChannel
    */
   handler(
     command: Command,
+    context: any,
   ): Promise<Command[COMMAND_RETURN]> {
     if (this.commandBus.handlers.has(command.constructor.name)) {
       const handler = this.commandBus.handlers.get(command.constructor.name)!;
-      return Promise.resolve(handler(command, this.context));
+      return Promise.resolve(handler(command, context ?? this.context));
     }
 
     const { promise, resolve, reject } = Promise.withResolvers();
@@ -318,7 +319,7 @@ export class PortChannelPlugin extends PortChannel
     if (this.commandBus.streamHandlers.has(command.constructor.name)) {
       return this.commandBus.streamHandlers.get(command.constructor.name)!(
         command,
-        context,
+        context ?? this.context,
         next,
       );
     }
