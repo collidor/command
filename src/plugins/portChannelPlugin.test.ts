@@ -186,3 +186,21 @@ Deno.test("PortChannelPlugin - use local asyncStreamHandler if available", async
   assertEquals(await promise, 43);
   assertEquals(fakePort.messages.length, messagesLength);
 });
+
+Deno.test("PortChannelPlugin - use local handler if available", async () => {
+  const portChannelPlugin = new PortChannelPlugin();
+  const fakePort = new FakeMessagePort();
+  portChannelPlugin.addPort(fakePort);
+  const commandBus = new CommandBus({
+    plugin: portChannelPlugin,
+  });
+
+  commandBus.register(ExampleCommand, (command) => {
+    return command.data + 1;
+  });
+
+  const command = new ExampleCommand(42);
+  const promise = commandBus.execute(command);
+
+  assertEquals(await promise, 43);
+});

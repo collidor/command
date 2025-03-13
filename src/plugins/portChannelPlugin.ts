@@ -142,7 +142,7 @@ export class PortChannelPlugin extends PortChannel
   ): Promise<Command[COMMAND_RETURN]> {
     if (this.commandBus.handlers.has(command.constructor.name)) {
       const handler = this.commandBus.handlers.get(command.constructor.name)!;
-      return Promise.resolve(handler(command.data, this.context));
+      return Promise.resolve(handler(command, this.context));
     }
 
     const { promise, resolve, reject } = Promise.withResolvers();
