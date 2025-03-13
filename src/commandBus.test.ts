@@ -1,7 +1,7 @@
 import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert";
-import { Command, COMMAND_RETURN } from "./commandModel.ts";
+import { Command, type COMMAND_RETURN } from "./commandModel.ts";
 import { CommandBus } from "./commandBus.ts";
-import { CommandBusPlugin } from "./main.ts";
+import type { CommandBusPlugin } from "./main.ts";
 
 class ExampleCommand extends Command<number, number> {
 }

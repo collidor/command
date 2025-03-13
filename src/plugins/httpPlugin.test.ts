@@ -173,7 +173,7 @@ Deno.test("httpServerCommand - should throw error for synchronous errors", () =>
   assertRejects(() => plugin.handleRequest(request), Error, "Sync error");
 });
 
-Deno.test("httpServerCommand - should trhow error object for asynchronous errors", async () => {
+Deno.test("httpServerCommand - should trhow error object for asynchronous errors", () => {
   const plugin = httpServerPlugin();
 
   const bus = new CommandBus({

@@ -316,10 +316,6 @@ export class PortChannelPlugin extends PortChannel
     next: (data: Command[COMMAND_RETURN], done: boolean, error?: any) => void,
   ): () => void {
     if (this.commandBus.streamHandlers.has(command.constructor.name)) {
-      console.log(
-        "streamHandler",
-        next,
-      );
       return this.commandBus.streamHandlers.get(command.constructor.name)!(
         command,
         context,

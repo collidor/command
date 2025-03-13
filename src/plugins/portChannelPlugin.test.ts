@@ -146,7 +146,7 @@ Deno.test("PortChannelPlugin - use local streamHandler if available", async () =
     plugin: portChannelPlugin,
   });
 
-  commandBus.registerStream(ExampleCommand, (command, context, next) => {
+  commandBus.registerStream(ExampleCommand, (_command, _context, next) => {
     next(43, true);
     return () => {};
   });

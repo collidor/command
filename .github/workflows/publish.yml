@@ -17,6 +17,9 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Lint
+        run: deno lint
+
       - name: Run Tests with Coverage
         run: deno test --coverage
 
