@@ -1,7 +1,7 @@
-import { MessagePortLike } from "@collidor/event";
+import type { MessagePortLike } from "@collidor/event";
 import { PortChannelPlugin } from "./portChannelPlugin.ts";
 import { CommandBus } from "../commandBus.ts";
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { Command } from "../commandModel.ts";
 
 function delay(ms: number): Promise<void> {
@@ -136,4 +136,53 @@ Deno.test("PortChannelPlugin - command times out", async () => {
   await delay(1000);
 
   assert((await promise).message.includes("Timeout"));
+});
+
+Deno.test("PortChannelPlugin - use local streamHandler if available", async () => {
+  const portChannelPlugin = new PortChannelPlugin();
+  const fakePort = new FakeMessagePort();
+  portChannelPlugin.addPort(fakePort);
+  const commandBus = new CommandBus({
+    plugin: portChannelPlugin,
+  });
+
+  commandBus.registerStream(ExampleCommand, (command, context, next) => {
+    next(43, true);
+    return () => {};
+  });
+
+  const command = new ExampleCommand(42);
+  const promise = new Promise((resolve) =>
+    commandBus.stream(command, (data) => {
+      resolve(data);
+    })
+  );
+
+  assertEquals(fakePort.messages.length, 2);
+  assertEquals(await promise, 43);
+});
+
+Deno.test("PortChannelPlugin - use local asyncStreamHandler if available", async () => {
+  const portChannelPlugin = new PortChannelPlugin();
+  const fakePort = new FakeMessagePort();
+  portChannelPlugin.addPort(fakePort);
+  const commandBus = new CommandBus({
+    plugin: portChannelPlugin,
+  });
+
+  commandBus.registerStreamAsync(ExampleCommand, async function* () {
+    yield 43;
+  });
+
+  const command = new ExampleCommand(42);
+  const messagesLength = fakePort.messages.length;
+  const promise = new Promise((resolve) =>
+    commandBus.stream(command, (data) => {
+      resolve(data);
+    })
+  );
+
+  assertEquals(fakePort.messages.length, 3);
+  assertEquals(await promise, 43);
+  assertEquals(fakePort.messages.length, messagesLength);
 });

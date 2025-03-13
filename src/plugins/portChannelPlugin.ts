@@ -140,6 +140,11 @@ export class PortChannelPlugin extends PortChannel
   handler(
     command: Command,
   ): Promise<Command[COMMAND_RETURN]> {
+    if (this.commandBus.handlers.has(command.constructor.name)) {
+      const handler = this.commandBus.handlers.get(command.constructor.name)!;
+      return Promise.resolve(handler(command.data, this.context));
+    }
+
     const { promise, resolve, reject } = Promise.withResolvers();
     const id = crypto.randomUUID();
     // 5 seconds timeout
@@ -307,8 +312,50 @@ export class PortChannelPlugin extends PortChannel
 
   streamHandler(
     command: Command,
+    context: any,
     next: (data: Command[COMMAND_RETURN], done: boolean, error?: any) => void,
   ): () => void {
+    if (this.commandBus.streamHandlers.has(command.constructor.name)) {
+      console.log(
+        "streamHandler",
+        next,
+      );
+      return this.commandBus.streamHandlers.get(command.constructor.name)!(
+        command,
+        context,
+        next,
+      );
+    }
+
+    if (this.commandBus.asyncStreamHandlers.has(command.constructor.name)) {
+      const handler = this.commandBus.asyncStreamHandlers.get(
+        command.constructor.name,
+      );
+      if (!handler) {
+        throw new Error(
+          `No stream plugin registered for ${command.constructor.name}`,
+        );
+      }
+
+      let unsubscribed = false;
+
+      (async () => {
+        for await (const data of handler(command, this.context)) {
+          if (unsubscribed) {
+            return () => {};
+          }
+
+          next(data, false);
+        }
+        next(null, true);
+      })().catch((error) => {
+        next(null, true, error);
+      });
+      return () => {
+        unsubscribed = true;
+      };
+    }
+
     const id = crypto.randomUUID();
     const unsubscribeName = getUnsubscribeName(command.constructor.name);
 
