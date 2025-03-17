@@ -1,0 +1,5 @@
+deno.json
+deno.lock
+**/*.test.ts
+.github
+!dist
