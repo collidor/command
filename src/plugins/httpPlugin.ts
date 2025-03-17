@@ -70,6 +70,7 @@ export function httpClientPlugin<
   options?: {
     headers?: ArgHeaders<TContext>;
     serializer?: Serializer<TSerializer>;
+    requestInit?: RequestInit;
   },
 ): CommandBusPlugin<Command, TContext, Promise<Command[COMMAND_RETURN]>> & {
   defaultHeaders: Headers;
@@ -84,8 +85,11 @@ export function httpClientPlugin<
     if (handler) {
       return Promise.resolve(handler(command, context));
     }
-    const { headers = new Headers(), serializer = defaultSerializer } =
-      options ?? {};
+    const {
+      headers = new Headers(),
+      serializer = defaultSerializer,
+      requestInit = {},
+    } = options ?? {};
     const url = typeof route === "function" ? route(command, context) : route;
 
     const headersValue = parseHeaders(
@@ -104,6 +108,8 @@ export function httpClientPlugin<
       method: "POST",
       headers: headersValue,
       body,
+      credentials: "same-origin",
+      ...requestInit,
     });
     if (!response.ok) {
       throw new Error(`HTTP error: ${response.status}`);
