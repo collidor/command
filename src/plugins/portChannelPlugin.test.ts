@@ -1,11 +1,59 @@
 import type { MessagePortLike } from "@collidor/event";
 import { PortChannelPlugin } from "./portChannelPlugin.ts";
 import { CommandBus } from "../commandBus.ts";
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Command } from "../commandModel.ts";
+import { assertSpyCalls, spy } from "@std/testing/mock";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function connectPorts(...ports: FakeMessagePort[]) {
+  for (const port of ports) {
+    port.postMessage = function (this: FakeMessagePort, message: any) {
+      this.messages.push(message);
+
+      for (const p of ports) {
+        if (p === port) continue;
+        p.onmessage?.({ data: message, currentTarget: p });
+      }
+    };
+  }
+}
+
+function getNodes<const N extends number>(n: N):
+  & Array<{
+    port: FakeMessagePort;
+    portChannelPlugin: PortChannelPlugin;
+    commandBus: CommandBus<any, PortChannelPlugin>;
+  }>
+  & { length: N } {
+  const ret = [] as any[] as
+    & Array<{
+      port: FakeMessagePort;
+      portChannelPlugin: PortChannelPlugin;
+      commandBus: CommandBus<any, PortChannelPlugin>;
+    }>
+    & { length: N };
+
+  for (let i = 0; i < n; i++) {
+    const port = new FakeMessagePort(i + "");
+    const portChannelPlugin = new PortChannelPlugin();
+    portChannelPlugin.addPort(port);
+    const commandBus = new CommandBus({
+      plugin: portChannelPlugin,
+    });
+    ret[i] = {
+      port,
+      portChannelPlugin,
+      commandBus,
+    };
+  }
+
+  connectPorts(...ret.map((v) => v.port));
+
+  return ret;
 }
 
 // A simple FakeMessagePort that implements MessagePortLike for testing.
@@ -14,8 +62,12 @@ class FakeMessagePort implements MessagePortLike {
   public onmessage: ((ev: any) => void) | null = null;
   public onmessageerror: ((ev: MessageEvent) => void) | null = null;
 
+  constructor(public name = "FakeMessagePort") {}
+
   postMessage(message: any): void {
-    this.messages.push(message);
+    this.messages.push(
+      typeof message === "string" ? JSON.parse(message) : message,
+    );
   }
   start(): void {}
 }
@@ -37,101 +89,45 @@ Deno.test("PortChannelPlugin - install CommandBus", () => {
 });
 
 Deno.test("PortChannelPlugin - send command", async () => {
-  const portChannelPlugin = new PortChannelPlugin();
-  const fakePort = new FakeMessagePort();
-  portChannelPlugin.addPort(fakePort);
-  const commandBus = new CommandBus({
-    plugin: portChannelPlugin,
-  });
+  const nodes = getNodes(2);
 
-  fakePort.onmessage?.({
-    data: {
-      name: "ExampleCommand",
-      type: "subscribeEvent",
-    },
-  });
+  nodes[0].commandBus.register(ExampleCommand, (command) => command.data * 2);
 
   const command = new ExampleCommand(42);
-  const promise = commandBus.execute(command);
+  const promise = nodes[1].commandBus.execute(command);
 
-  const dataMessage = JSON.parse(
-    fakePort.messages.find((m) => m.type === "dataEvent").data,
-  );
-
-  fakePort.onmessage?.({
-    data: {
-      type: "dataEvent",
-      name: "ExampleCommand_Response",
-      data: JSON.stringify({
-        id: dataMessage.id,
-        data: 43,
-        done: true,
-      }),
-    },
-  });
-  await delay(10);
-
-  assertEquals(await promise, 43);
+  assertEquals(await promise, 84);
 });
 
 Deno.test("PortChannelPlugin - send command with error", async () => {
-  const portChannelPlugin = new PortChannelPlugin();
-  const fakePort = new FakeMessagePort();
-  portChannelPlugin.addPort(fakePort);
-  const commandBus = new CommandBus({
-    plugin: portChannelPlugin,
-  });
+  const nodes = getNodes(2);
 
-  fakePort.onmessage?.({
-    data: {
-      name: "ExampleCommand",
-      type: "subscribeEvent",
-    },
+  nodes[0].commandBus.register(ExampleCommand, () => {
+    throw "error";
   });
 
   const command = new ExampleCommand(42);
-  const promise = commandBus.execute(command).catch((e) => e);
 
-  const dataMessage = JSON.parse(
-    fakePort.messages.find((m) => m.type === "dataEvent").data,
-  );
-
-  fakePort.onmessage?.({
-    data: {
-      type: "dataEvent",
-      name: "ExampleCommand_Response",
-      data: JSON.stringify({
-        id: dataMessage.id,
-        error: "error",
-        done: true,
-      }),
-    },
-  });
-  await delay(10);
-
-  assert(await promise === "error");
+  assertRejects(() => nodes[1].commandBus.execute(command), "error");
 });
 
 Deno.test("PortChannelPlugin - command times out", async () => {
+  const port = new FakeMessagePort();
   const portChannelPlugin = new PortChannelPlugin({
     commandTimeout: 200,
     bufferTimeout: 50,
   });
-  const fakePort = new FakeMessagePort();
-  portChannelPlugin.addPort(fakePort);
+  portChannelPlugin.addPort(port);
   const commandBus = new CommandBus({
     plugin: portChannelPlugin,
   });
-
-  fakePort.onmessage?.({
-    data: {
+  port.onmessage?.({
+    data: JSON.stringify({
       name: "ExampleCommand",
       type: "subscribeEvent",
-    },
+    }),
   });
-
-  const command = new ExampleCommand(42);
-  const promise = commandBus.execute(command).catch((e) => e);
+  const promise = commandBus.execute(new ExampleCommand(42)).catch((e) => e);
 
   await delay(1000);
 
@@ -139,52 +135,67 @@ Deno.test("PortChannelPlugin - command times out", async () => {
 });
 
 Deno.test("PortChannelPlugin - use local streamHandler if available", async () => {
-  const portChannelPlugin = new PortChannelPlugin();
-  const fakePort = new FakeMessagePort();
-  portChannelPlugin.addPort(fakePort);
-  const commandBus = new CommandBus({
-    plugin: portChannelPlugin,
-  });
+  const nodes = getNodes(2);
 
-  commandBus.registerStream(ExampleCommand, (_command, _context, next) => {
-    next(43, true);
-    return () => {};
-  });
+  const spy1 = spy();
+  nodes[0].commandBus.registerStream(
+    ExampleCommand,
+    (_command, _context, next) => {
+      next(1, true);
+      spy1(1);
+      return () => {};
+    },
+  );
+
+  const spy2 = spy();
+
+  nodes[1].commandBus.registerStream(
+    ExampleCommand,
+    (_command, _context, next) => {
+      next(2, true);
+      spy2(2);
+      return () => {};
+    },
+  );
 
   const command = new ExampleCommand(42);
   const promise = new Promise((resolve) =>
-    commandBus.stream(command, (data) => {
+    nodes[0].commandBus.stream(command, (data) => {
       resolve(data);
     })
   );
 
-  assertEquals(fakePort.messages.length, 2);
-  assertEquals(await promise, 43);
+  assertEquals(await promise, 1);
+  assertSpyCalls(spy1, 1);
+  assertSpyCalls(spy2, 0);
 });
 
 Deno.test("PortChannelPlugin - use local asyncStreamHandler if available", async () => {
-  const portChannelPlugin = new PortChannelPlugin();
-  const fakePort = new FakeMessagePort();
-  portChannelPlugin.addPort(fakePort);
-  const commandBus = new CommandBus({
-    plugin: portChannelPlugin,
+  const nodes = getNodes(2);
+
+  const spy1 = spy();
+  nodes[0].commandBus.registerStreamAsync(ExampleCommand, async function* () {
+    spy1(1);
+    yield 1;
   });
 
-  commandBus.registerStreamAsync(ExampleCommand, async function* () {
-    yield 43;
+  const spy2 = spy();
+
+  nodes[1].commandBus.registerStreamAsync(ExampleCommand, async function* () {
+    spy2(2);
+    yield 2;
   });
 
   const command = new ExampleCommand(42);
-  const messagesLength = fakePort.messages.length;
   const promise = new Promise((resolve) =>
-    commandBus.stream(command, (data) => {
+    nodes[0].commandBus.stream(command, (data) => {
       resolve(data);
     })
   );
 
-  assertEquals(fakePort.messages.length, 3);
-  assertEquals(await promise, 43);
-  assertEquals(fakePort.messages.length, messagesLength);
+  assertEquals(await promise, 1);
+  assertSpyCalls(spy1, 1);
+  assertSpyCalls(spy2, 0);
 });
 
 Deno.test("PortChannelPlugin - use local handler if available", async () => {

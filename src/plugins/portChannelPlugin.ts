@@ -1,4 +1,8 @@
-import { PortChannel, type PortChannelOptions } from "@collidor/event";
+import {
+  DataEvent,
+  PortChannel,
+  type PortChannelOptions,
+} from "@collidor/event";
 import type { CommandBus, CommandBusPlugin, Type } from "../commandBus.ts";
 import type { Command, COMMAND_RETURN } from "../commandModel.ts";
 
@@ -25,7 +29,7 @@ export type PortChannelPluginOptions = PortChannelOptions & {
 const getResponseName = (name: string): string => `${name}_Response`;
 const getUnsubscribeName = (name: string): string => `${name}_Unsubscribe`;
 
-export class PortChannelPlugin extends PortChannel
+export class PortChannelPlugin extends PortChannel<any>
   implements CommandBusPlugin<Command, any, Promise<Command[COMMAND_RETURN]>> {
   protected commandBus!: CommandBus<any, any>;
   declare public context: any;
@@ -38,7 +42,7 @@ export class PortChannelPlugin extends PortChannel
   protected timeout = 5000;
 
   constructor(options?: PortChannelPluginOptions) {
-    super(undefined, options);
+    super(options);
     if (options?.commandTimeout) {
       this.timeout = options.commandTimeout;
     }
@@ -66,7 +70,9 @@ export class PortChannelPlugin extends PortChannel
     };
 
     const callback = (response: CommandResponseEvent) => {
-      const subscribedHandler = this.responseSubscriptions.get(responseName)
+      const subscribedHandler = this.responseSubscriptions.get(
+        responseName,
+      )
         ?.get(id);
       if (subscribedHandler) {
         subscribedHandler(response.data, response.done, response.error);
@@ -114,34 +120,52 @@ export class PortChannelPlugin extends PortChannel
 
     const responseName = getResponseName(command.name);
 
-    this.subscribe(command.name, async (commandData: CommandDataEvent) => {
-      try {
-        const cmd = this.getCommandInstance(command.name, commandData.data);
-        let result = handler(cmd, this.context);
-        if (result instanceof Promise) {
-          result = await result;
-        }
+    this.subscribe(
+      command.name,
+      async (
+        commandData: CommandDataEvent,
+        _context,
+        dataEvent: DataEvent,
+      ) => {
+        try {
+          const cmd = this.getCommandInstance(
+            command.name,
+            commandData.data,
+          );
+          let result = handler(cmd, this.context);
+          if (result instanceof Promise) {
+            result = await result;
+          }
 
-        this.publish(
-          responseName,
-          {
-            id: commandData.id,
-            data: result,
-            done: true,
-          } as CommandResponseEvent,
-        );
-      } catch (error) {
-        this.publish(
-          responseName,
-          {
-            id: commandData.id,
-            data: null,
-            done: true,
-            error,
-          } as CommandResponseEvent,
-        );
-      }
-    });
+          this.publish(
+            responseName,
+            {
+              id: commandData.id,
+              data: result,
+              done: true,
+            } as CommandResponseEvent,
+            {
+              singleConsumer: true,
+              target: dataEvent.source,
+            },
+          );
+        } catch (error) {
+          this.publish(
+            responseName,
+            {
+              id: commandData.id,
+              data: null,
+              done: true,
+              error,
+            } as CommandResponseEvent,
+            {
+              singleConsumer: true,
+              target: dataEvent.source,
+            },
+          );
+        }
+      },
+    );
   }
 
   /**
@@ -153,7 +177,9 @@ export class PortChannelPlugin extends PortChannel
     context: any,
   ): Promise<Command[COMMAND_RETURN]> {
     if (this.commandBus.handlers.has(command.constructor.name)) {
-      const handler = this.commandBus.handlers.get(command.constructor.name)!;
+      const handler = this.commandBus.handlers.get(
+        command.constructor.name,
+      )!;
       return Promise.resolve(handler(command, context ?? this.context));
     }
 
@@ -163,7 +189,9 @@ export class PortChannelPlugin extends PortChannel
 
     // Set up a timeout to auto-reject if no response is received.
     const timer = setTimeout(() => {
-      const unsubscribeName = getUnsubscribeName(command.constructor.name);
+      const unsubscribeName = getUnsubscribeName(
+        command.constructor.name,
+      );
       this.publish(unsubscribeName, { id } as CommandUnsubscribeEvent);
       reject(new Error("Timeout waiting for command response"));
       clearTimeout(timer);
@@ -189,6 +217,9 @@ export class PortChannelPlugin extends PortChannel
         id,
         data: command.data,
       } as CommandDataEvent,
+      {
+        singleConsumer: true,
+      },
     );
 
     return promise;
@@ -199,7 +230,9 @@ export class PortChannelPlugin extends PortChannel
    * Adds a timeout/cancellation mechanism via unsubscribe events.
    */
   protected registerAsyncStream(command: Type<Command<any, any>>): void {
-    const asyncHandler = this.commandBus.asyncStreamHandlers.get(command.name);
+    const asyncHandler = this.commandBus.asyncStreamHandlers.get(
+      command.name,
+    );
     if (!asyncHandler) {
       throw new Error(`Stream ${command.name} not found`);
     }
@@ -220,53 +253,69 @@ export class PortChannelPlugin extends PortChannel
       },
     );
 
-    this.subscribe(command.name, (commandData: CommandDataEvent) => {
-      let unsubscribed = false;
-      const cmd = this.getCommandInstance(command.name, commandData.data);
-      const iterator = asyncHandler(cmd, this.context);
+    this.subscribe(
+      command.name,
+      (commandData: CommandDataEvent, _context, dataEvent) => {
+        let unsubscribed = false;
+        const cmd = this.getCommandInstance(
+          command.name,
+          commandData.data,
+        );
+        const iterator = asyncHandler(cmd, this.context);
 
-      if (!unsubscriptions.has(commandData.id)) {
-        unsubscriptions.set(commandData.id, () => {
-          unsubscribed = true;
+        if (!unsubscriptions.has(commandData.id)) {
+          unsubscriptions.set(commandData.id, () => {
+            unsubscribed = true;
+            this.publish(
+              unsubscribeName,
+              {
+                id: commandData.id,
+              } as CommandUnsubscribeEvent,
+              {
+                singleConsumer: true,
+                target: dataEvent.source,
+              },
+            );
+            unsubscriptions.delete(commandData.id);
+          });
+        }
+
+        const handleCurrent = (
+          current: IteratorResult<any, any>,
+        ): void | Promise<any> => {
+          if (unsubscribed) {
+            return;
+          }
+
           this.publish(
-            unsubscribeName,
+            responseName,
             {
               id: commandData.id,
-            } as CommandUnsubscribeEvent,
+              data: current.value,
+              done: current.done,
+            } as CommandResponseEvent,
+            {
+              singleConsumer: true,
+              target: dataEvent.source,
+            },
           );
-          unsubscriptions.delete(commandData.id);
-        });
-      }
 
-      const handleCurrent = (
-        current: IteratorResult<any, any>,
-      ): void | Promise<any> => {
-        if (unsubscribed) {
-          return;
-        }
-
-        this.publish(
-          responseName,
-          {
-            id: commandData.id,
-            data: current.value,
-            done: current.done,
-          } as CommandResponseEvent,
-        );
-
-        if (!current.done) {
-          return iterator.next().then(handleCurrent);
-        } else {
-          // Clean up when stream completes
-          unsubscriptions.delete(commandData.id);
-        }
-      };
-      void iterator.next().then(handleCurrent);
-    });
+          if (!current.done) {
+            return iterator.next().then(handleCurrent);
+          } else {
+            // Clean up when stream completes
+            unsubscriptions.delete(commandData.id);
+          }
+        };
+        void iterator.next().then(handleCurrent);
+      },
+    );
   }
 
   registerStream(command: Type<Command<any, any>>): void {
-    const asyncHandler = this.commandBus.asyncStreamHandlers.get(command.name);
+    const asyncHandler = this.commandBus.asyncStreamHandlers.get(
+      command.name,
+    );
     if (asyncHandler) {
       return this.registerAsyncStream(command);
     }
@@ -278,59 +327,75 @@ export class PortChannelPlugin extends PortChannel
 
     const responseName = getResponseName(command.name);
 
-    this.subscribe(command.name, (commandData: CommandDataEvent) => {
-      const unsubscribeName = getUnsubscribeName(command.name);
-      let unsubscribed = false;
+    this.subscribe(
+      command.name,
+      (commandData: CommandDataEvent, _context, dataEvent) => {
+        const unsubscribeName = getUnsubscribeName(command.name);
+        let unsubscribed = false;
 
-      const cmd = this.getCommandInstance(command.name, commandData.data);
-      const unsubscribe = handler(
-        cmd,
-        this.context,
-        (data: any, done: boolean, error?: any) => {
-          if (unsubscribed) {
-            return;
-          }
+        const cmd = this.getCommandInstance(
+          command.name,
+          commandData.data,
+        );
+        const unsubscribe = handler(
+          cmd,
+          this.context,
+          (data: any, done: boolean, error?: any) => {
+            if (unsubscribed) {
+              return;
+            }
 
-          this.publish(
-            responseName,
-            {
-              id: commandData.id,
-              data,
-              done,
-              error,
-            } as CommandResponseEvent,
-          );
-
-          if (done) {
-            unsubscribed = true;
             this.publish(
-              unsubscribeName,
+              responseName,
               {
                 id: commandData.id,
-              } as CommandUnsubscribeEvent,
+                data,
+                done,
+                error,
+              } as CommandResponseEvent,
+              {
+                singleConsumer: true,
+                target: dataEvent.source,
+              },
             );
-          }
-        },
-      );
 
-      this.subscribe(
-        unsubscribeName,
-        (unsubscribeData: CommandUnsubscribeEvent) => {
-          if (unsubscribeData.id === commandData.id) {
-            unsubscribe();
-          }
-        },
-      );
-    });
+            if (done) {
+              unsubscribed = true;
+              this.publish(
+                unsubscribeName,
+                {
+                  id: commandData.id,
+                } as CommandUnsubscribeEvent,
+              );
+            }
+          },
+        );
+
+        this.subscribe(
+          unsubscribeName,
+          (unsubscribeData: CommandUnsubscribeEvent) => {
+            if (unsubscribeData.id === commandData.id) {
+              unsubscribe();
+            }
+          },
+        );
+      },
+    );
   }
 
   streamHandler(
     command: Command,
     context: any,
-    next: (data: Command[COMMAND_RETURN], done: boolean, error?: any) => void,
+    next: (
+      data: Command[COMMAND_RETURN],
+      done: boolean,
+      error?: any,
+    ) => void,
   ): () => void {
     if (this.commandBus.streamHandlers.has(command.constructor.name)) {
-      return this.commandBus.streamHandlers.get(command.constructor.name)!(
+      return this.commandBus.streamHandlers.get(
+        command.constructor.name,
+      )!(
         command,
         context ?? this.context,
         next,
@@ -377,6 +442,9 @@ export class PortChannelPlugin extends PortChannel
         id,
         data: command.data,
       } as CommandDataEvent,
+      {
+        singleConsumer: true,
+      },
     );
 
     return () => {

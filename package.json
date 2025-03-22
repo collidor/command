@@ -1,6 +1,6 @@
 {
     "name": "@collidor/command",
-    "version": "4.4.4",
+    "version": "4.4.5",
     "description": "A small library to create, register and execute commands.",
     "repository": {
         "type": "git",
@@ -13,7 +13,8 @@
     "scripts": {
         "test": "deno test",
         "build": "tsup",
-        "dev": "tsup --watch"
+        "dev": "tsup --watch",
+        "test:coverage": "deno eval \"await Deno.remove('./cov_profile', { recursive: true }).catch(() => {})\" && deno test --coverage=cov_profile && deno coverage --html cov_profile"
     },
     "keywords": [
         "command",
@@ -23,11 +24,11 @@
     "author": "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
     "license": "MIT",
     "devDependencies": {
-        "@collidor/event": "^3.1.7",
+        "@collidor/event": "4.0.3",
         "tsup": "^8.4.0",
         "typescript": "^5.8.2"
     },
     "peerDependencies": {
-        "@collidor/event": "^3"
+        "@collidor/event": "^4.0.3"
     }
 }

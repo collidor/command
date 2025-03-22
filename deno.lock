@@ -1,23 +1,23 @@
 {
   "version": "4",
   "specifiers": {
-    "jsr:@collidor/event@^3.1.7": "3.1.7",
+    "jsr:@collidor/event@^4.0.3": "4.0.3",
     "jsr:@std/assert@*": "1.0.11",
-    "jsr:@std/assert@1": "1.0.11",
     "jsr:@std/assert@^1.0.10": "1.0.11",
+    "jsr:@std/assert@^1.0.11": "1.0.11",
     "jsr:@std/async@^1.0.9": "1.0.10",
     "jsr:@std/data-structures@^1.0.6": "1.0.6",
     "jsr:@std/fs@^1.0.9": "1.0.11",
     "jsr:@std/internal@^1.0.5": "1.0.5",
     "jsr:@std/path@^1.0.8": "1.0.8",
-    "jsr:@std/testing@1": "1.0.9",
-    "npm:@collidor/event@^3.1.7": "3.1.7",
+    "jsr:@std/testing@^1.0.9": "1.0.9",
+    "npm:@collidor/event@4.0.3": "4.0.3",
     "npm:tsup@^8.4.0": "8.4.0_typescript@5.8.2_esbuild@0.25.0",
     "npm:typescript@^5.8.2": "5.8.2"
   },
   "jsr": {
-    "@collidor/event@3.1.7": {
-      "integrity": "79d6e11b210a42b86a8c26c4e881a26f858bc920068cfdcaf2a4b1f16931c61e"
+    "@collidor/event@4.0.3": {
+      "integrity": "cc3ea02be5ef98a1eed21aea303ce6cafba41a3c2f3300ff926699709b875361"
     },
     "@std/assert@1.0.11": {
       "integrity": "2461ef3c368fe88bc60e186e7744a93112f16fd110022e113a0849e94d1c83c1",
@@ -56,8 +56,8 @@
     }
   },
   "npm": {
-    "@collidor/event@3.1.7": {
-      "integrity": "sha512-hpYbUkvfomC2wQCkCJDSBXLAQLibvv69XWXEgdbADjLiFpourlvYZdFPxKOUSV2NQqTguJiDaqVNXUpf8Gp8Eg=="
+    "@collidor/event@4.0.3": {
+      "integrity": "sha512-usaauAcRBK1X5Y+76h92ZPhCcJSGtDIV7iq74J3yjjAmB1q+wTHOpC9sm5TEdVSzJ1H1X7O6vhbShvg/oGYsbg=="
     },
     "@esbuild/aix-ppc64@0.25.0": {
       "integrity": "sha512-O7vun9Sf8DFjH2UtqK8Ku3LkquL9SZL8OLY1T5NZkA34+wG3OQF7cl4Ql8vdNzM6fzBbYfLaiRLIOZ+2FOCgBQ=="
@@ -640,13 +640,13 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@collidor/event@^3.1.7",
-      "jsr:@std/assert@1",
-      "jsr:@std/testing@1"
+      "jsr:@collidor/event@^4.0.3",
+      "jsr:@std/assert@^1.0.11",
+      "jsr:@std/testing@^1.0.9"
     ],
     "packageJson": {
       "dependencies": [
-        "npm:@collidor/event@^3.1.7",
+        "npm:@collidor/event@4.0.3",
         "npm:tsup@^8.4.0",
         "npm:typescript@^5.8.2"
       ]

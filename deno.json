@@ -1,6 +1,6 @@
 {
     "name": "@collidor/command",
-    "version": "4.4.4",
+    "version": "4.4.5",
     "license": "MIT",
     "exports": "./src/main.ts",
     "publish": {
@@ -19,9 +19,9 @@
         "dev": "deno run --watch ./src/main.ts"
     },
     "imports": {
-        "@std/assert": "jsr:@std/assert@1",
-        "@std/testing": "jsr:@std/testing@1",
-        "@collidor/event": "jsr:@collidor/event@^3.1.7"
+        "@std/assert": "jsr:@std/assert@^1.0.11",
+        "@std/testing": "jsr:@std/testing@^1.0.9",
+        "@collidor/event": "jsr:@collidor/event@^4.0.3"
     },
     "lint": {
         "rules": {
@@ -32,16 +32,5 @@
                 "no-console"
             ]
         }
-    },
-    "compilerOptions": {
-        "lib": [
-            "ESNext",
-            "deno.window"
-        ],
-        "noUncheckedIndexedAccess": true,
-        "strict": true
-    },
-    "unstable": [
-        "sloppy-imports"
-    ]
+    }
 }
