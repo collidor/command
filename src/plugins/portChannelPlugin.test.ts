@@ -99,7 +99,7 @@ Deno.test("PortChannelPlugin - send command", async () => {
   assertEquals(await promise, 84);
 });
 
-Deno.test("PortChannelPlugin - send command with error", async () => {
+Deno.test("PortChannelPlugin - send command with error", () => {
   const nodes = getNodes(2);
 
   nodes[0].commandBus.register(ExampleCommand, () => {

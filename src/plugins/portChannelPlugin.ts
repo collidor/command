@@ -1,5 +1,5 @@
 import {
-  DataEvent,
+  type DataEvent,
   PortChannel,
   type PortChannelOptions,
 } from "@collidor/event";
