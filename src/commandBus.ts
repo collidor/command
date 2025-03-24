@@ -19,7 +19,7 @@ export type StreamPluginHandler<
   command: C,
   context: TContext,
   next: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
-) => () => void;
+) => (() => void) | Promise<() => void>;
 
 export type CommandBusPlugin<
   C extends Command,
@@ -78,7 +78,7 @@ export class CommandBus<
       command: Command,
       context: TContext,
       next: (data: Command[COMMAND_RETURN], done: boolean, error?: any) => void,
-    ) => () => void
+    ) => (() => void) | Promise<() => void>
   > = new Map();
 
   public asyncStreamHandlers: Map<
@@ -185,14 +185,21 @@ export class CommandBus<
           }
         },
       );
-      return unsubscribe;
+      return () => {
+        unsubscribed = true;
+        Promise.resolve(unsubscribe).then((f) => f());
+      };
     }
 
-    return this.plugin.streamHandler(
+    const unsubscribe = this.plugin.streamHandler(
       command,
       context ?? this.context,
       callback,
     );
+
+    return () => {
+      Promise.resolve(unsubscribe).then((f) => f());
+    };
   }
 
   async *streamAsync<C extends Command>(
@@ -273,7 +280,7 @@ export class CommandBus<
       command: C,
       context: TContext,
       next: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
-    ) => () => void,
+    ) => (() => void) | Promise<() => void>,
   ) {
     this.commandConstructor.set(command.name, command);
     this.streamHandlers.set(command.name, handler as any);

@@ -375,7 +375,8 @@ export class PortChannelPlugin extends PortChannel<any>
           unsubscribeName,
           (unsubscribeData: CommandUnsubscribeEvent) => {
             if (unsubscribeData.id === commandData.id) {
-              unsubscribe();
+              unsubscribed = true;
+              Promise.resolve(unsubscribe).then((f) => f());
             }
           },
         );
@@ -391,7 +392,7 @@ export class PortChannelPlugin extends PortChannel<any>
       done: boolean,
       error?: any,
     ) => void,
-  ): () => void {
+  ): (() => void) | Promise<() => void> {
     if (this.commandBus.streamHandlers.has(command.constructor.name)) {
       return this.commandBus.streamHandlers.get(
         command.constructor.name,
