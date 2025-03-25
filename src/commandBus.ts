@@ -19,6 +19,7 @@ export type StreamPluginHandler<
   command: C,
   context: TContext,
   next: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
+  abortSignal?: AbortSignal,
 ) => (() => void) | Promise<() => void>;
 
 export type CommandBusPlugin<
@@ -78,7 +79,7 @@ export class CommandBus<
       command: Command,
       context: TContext,
       next: (data: Command[COMMAND_RETURN], done: boolean, error?: any) => void,
-    ) => (() => void) | Promise<() => void>
+    ) => (() => void) | Promise<() => void> | void
   > = new Map();
 
   public asyncStreamHandlers: Map<
@@ -156,6 +157,7 @@ export class CommandBus<
     command: C,
     callback: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
     context?: TContext,
+    abortSignal?: AbortSignal,
   ): () => void {
     if (!this.plugin?.streamHandler) {
       const handler = this.streamHandlers.get(command.constructor.name);
@@ -185,9 +187,19 @@ export class CommandBus<
           }
         },
       );
+
+      if (unsubscribe && abortSignal) {
+        abortSignal.addEventListener("abort", () => {
+          unsubscribed = true;
+          Promise.resolve(unsubscribe).then((f) => f());
+        });
+      }
+
       return () => {
         unsubscribed = true;
-        Promise.resolve(unsubscribe).then((f) => f());
+        if (unsubscribe) {
+          Promise.resolve(unsubscribe).then((f) => f());
+        }
       };
     }
 
@@ -195,10 +207,19 @@ export class CommandBus<
       command,
       context ?? this.context,
       callback,
+      abortSignal,
     );
 
+    if (unsubscribe && abortSignal) {
+      abortSignal.addEventListener("abort", () => {
+        Promise.resolve(unsubscribe).then((f) => f());
+      });
+    }
+
     return () => {
-      Promise.resolve(unsubscribe).then((f) => f());
+      if (unsubscribe) {
+        Promise.resolve(unsubscribe).then((f) => f());
+      }
     };
   }
 
@@ -280,7 +301,7 @@ export class CommandBus<
       command: C,
       context: TContext,
       next: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
-    ) => (() => void) | Promise<() => void>,
+    ) => (() => void) | Promise<() => void> | void,
   ) {
     this.commandConstructor.set(command.name, command);
     this.streamHandlers.set(command.name, handler as any);

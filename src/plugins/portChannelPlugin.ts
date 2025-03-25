@@ -376,7 +376,9 @@ export class PortChannelPlugin extends PortChannel<any>
           (unsubscribeData: CommandUnsubscribeEvent) => {
             if (unsubscribeData.id === commandData.id) {
               unsubscribed = true;
-              Promise.resolve(unsubscribe).then((f) => f());
+              if (unsubscribe) {
+                Promise.resolve(unsubscribe).then((f) => f());
+              }
             }
           },
         );
@@ -392,15 +394,22 @@ export class PortChannelPlugin extends PortChannel<any>
       done: boolean,
       error?: any,
     ) => void,
+    abortSignal?: AbortSignal,
   ): (() => void) | Promise<() => void> {
     if (this.commandBus.streamHandlers.has(command.constructor.name)) {
-      return this.commandBus.streamHandlers.get(
+      const unsubscribe = this.commandBus.streamHandlers.get(
         command.constructor.name,
       )!(
         command,
         context ?? this.context,
         next,
       );
+
+      return () => {
+        if (unsubscribe) {
+          Promise.resolve(unsubscribe).then((f) => f());
+        }
+      };
     }
 
     if (this.commandBus.asyncStreamHandlers.has(command.constructor.name)) {
@@ -427,6 +436,10 @@ export class PortChannelPlugin extends PortChannel<any>
       })().catch((error) => {
         next(null, true, error);
       });
+
+      abortSignal?.addEventListener("abort", () => {
+        unsubscribed = true;
+      });
       return () => {
         unsubscribed = true;
       };
@@ -447,6 +460,15 @@ export class PortChannelPlugin extends PortChannel<any>
         singleConsumer: true,
       },
     );
+
+    abortSignal?.addEventListener("abort", () => {
+      this.publish(
+        unsubscribeName,
+        {
+          id,
+        } as CommandUnsubscribeEvent,
+      );
+    });
 
     return () => {
       this.publish(
