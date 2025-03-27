@@ -1,28 +1,36 @@
 {
   "version": "4",
   "specifiers": {
-    "jsr:@collidor/event@^4.0.3": "4.0.3",
-    "jsr:@std/assert@*": "1.0.11",
+    "jsr:@collidor/event@^4.0.5": "4.0.5",
+    "jsr:@std/assert@*": "1.0.12",
     "jsr:@std/assert@^1.0.10": "1.0.11",
-    "jsr:@std/assert@^1.0.11": "1.0.11",
+    "jsr:@std/assert@^1.0.11": "1.0.12",
+    "jsr:@std/assert@^1.0.12": "1.0.12",
     "jsr:@std/async@^1.0.9": "1.0.10",
     "jsr:@std/data-structures@^1.0.6": "1.0.6",
     "jsr:@std/fs@^1.0.9": "1.0.11",
     "jsr:@std/internal@^1.0.5": "1.0.5",
+    "jsr:@std/internal@^1.0.6": "1.0.6",
     "jsr:@std/path@^1.0.8": "1.0.8",
-    "jsr:@std/testing@^1.0.9": "1.0.9",
-    "npm:@collidor/event@4.0.3": "4.0.3",
+    "jsr:@std/testing@^1.0.9": "1.0.10",
+    "npm:@collidor/event@4.0.5": "4.0.5",
     "npm:tsup@^8.4.0": "8.4.0_typescript@5.8.2_esbuild@0.25.0",
     "npm:typescript@^5.8.2": "5.8.2"
   },
   "jsr": {
-    "@collidor/event@4.0.3": {
-      "integrity": "cc3ea02be5ef98a1eed21aea303ce6cafba41a3c2f3300ff926699709b875361"
+    "@collidor/event@4.0.5": {
+      "integrity": "06f53b436b32fbbf7ee423f56d0760eb2bb3351caa072a5b202dee5ba0ec7466"
     },
     "@std/assert@1.0.11": {
       "integrity": "2461ef3c368fe88bc60e186e7744a93112f16fd110022e113a0849e94d1c83c1",
       "dependencies": [
-        "jsr:@std/internal"
+        "jsr:@std/internal@^1.0.5"
+      ]
+    },
+    "@std/assert@1.0.12": {
+      "integrity": "08009f0926dda9cbd8bef3a35d3b6a4b964b0ab5c3e140a4e0351fbf34af5b9a",
+      "dependencies": [
+        "jsr:@std/internal@^1.0.6"
       ]
     },
     "@std/async@1.0.10": {
@@ -40,6 +48,9 @@
     "@std/internal@1.0.5": {
       "integrity": "54a546004f769c1ac9e025abd15a76b6671ddc9687e2313b67376125650dc7ba"
     },
+    "@std/internal@1.0.6": {
+      "integrity": "9533b128f230f73bd209408bb07a4b12f8d4255ab2a4d22a1fd6d87304aca9a4"
+    },
     "@std/path@1.0.8": {
       "integrity": "548fa456bb6a04d3c1a1e7477986b6cffbce95102d0bb447c67c4ee70e0364be"
     },
@@ -50,14 +61,20 @@
         "jsr:@std/async",
         "jsr:@std/data-structures",
         "jsr:@std/fs",
-        "jsr:@std/internal",
+        "jsr:@std/internal@^1.0.5",
         "jsr:@std/path"
+      ]
+    },
+    "@std/testing@1.0.10": {
+      "integrity": "8997bd0b0df020b81bf5eae103c66622918adeff7e45e96291c92a29dbf82cc1",
+      "dependencies": [
+        "jsr:@std/assert@^1.0.12"
       ]
     }
   },
   "npm": {
-    "@collidor/event@4.0.3": {
-      "integrity": "sha512-usaauAcRBK1X5Y+76h92ZPhCcJSGtDIV7iq74J3yjjAmB1q+wTHOpC9sm5TEdVSzJ1H1X7O6vhbShvg/oGYsbg=="
+    "@collidor/event@4.0.5": {
+      "integrity": "sha512-Yrz+7YSjRH87Ey9JQYCDw3Hrx9TDZe3IywJJyVeSIfrht5AZnyixPkFV/O+niSzMG1c6yKgOlSMaDaIPHfhpnA=="
     },
     "@esbuild/aix-ppc64@0.25.0": {
       "integrity": "sha512-O7vun9Sf8DFjH2UtqK8Ku3LkquL9SZL8OLY1T5NZkA34+wG3OQF7cl4Ql8vdNzM6fzBbYfLaiRLIOZ+2FOCgBQ=="
@@ -640,13 +657,13 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@collidor/event@^4.0.3",
+      "jsr:@collidor/event@^4.0.5",
       "jsr:@std/assert@^1.0.11",
       "jsr:@std/testing@^1.0.9"
     ],
     "packageJson": {
       "dependencies": [
-        "npm:@collidor/event@4.0.3",
+        "npm:@collidor/event@4.0.5",
         "npm:tsup@^8.4.0",
         "npm:typescript@^5.8.2"
       ]
