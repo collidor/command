@@ -246,3 +246,72 @@ Deno.test("PortChannelPlugin - multiple clients can execute the same stream comm
   assertEquals(callback2.calls[0].args[0], 4);
   assertEquals(callback2.calls[1].args[0], 6);
 });
+
+Deno.test("PortChannelPlugin - multiple clients can execute the same async stream command", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStreamAsync(ExampleCommand, async function* (
+    command,
+    _context,
+  ) {
+    yield command.data * 2;
+    await delay(100);
+    yield command.data * 3;
+  });
+
+  const callback1 = spy();
+  const callback2 = spy();
+
+  nodes[1].commandBus.stream(new ExampleCommand(1), callback1);
+  nodes[1].commandBus.stream(new ExampleCommand(2), callback2);
+
+  await delay(2000);
+
+  assertSpyCalls(callback1, 3);
+  assertSpyCalls(callback2, 3);
+
+  assertEquals(callback1.calls[0].args[0], 2);
+  assertEquals(callback1.calls[1].args[0], 3);
+
+  assertEquals(callback2.calls[0].args[0], 4);
+  assertEquals(callback2.calls[1].args[0], 6);
+});
+
+Deno.test("PortChannelPlubin - should stop if unsubscribe is called", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStream(
+    ExampleCommand,
+    (command, _context, next) => {
+      let stop = false;
+      const timeouts: number[] = [];
+      for (let i = 0; i < command.data; i++) {
+        timeouts.push(setTimeout(() => {
+          if (stop) {
+            return;
+          }
+
+          next(i, i === command.data - 1);
+        }, i * 10));
+      }
+
+      return () => {
+        stop = true;
+        timeouts.forEach((timeout) => clearTimeout(timeout));
+      };
+    },
+  );
+
+  const result: number[] = [];
+  const unsubscribe = nodes[1].commandBus.stream(
+    new ExampleCommand(42),
+    (data) => {
+      result.push(data);
+      unsubscribe();
+    },
+  );
+
+  await delay(500);
+
+  assertEquals(result, [0]);
+});
