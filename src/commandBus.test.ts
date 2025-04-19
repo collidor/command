@@ -2,6 +2,7 @@ import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert";
 import { Command, type COMMAND_RETURN } from "./commandModel.ts";
 import { CommandBus } from "./commandBus.ts";
 import type { CommandBusPlugin } from "./main.ts";
+import { spy } from "@std/testing/mock";
 
 class ExampleCommand extends Command<number, number> {
 }
@@ -265,4 +266,26 @@ Deno.test("commandBus - should register and run handler with custom context", ()
   });
 
   assertEquals(commandBus.execute(new ExampleCommand(42), { custom: 12 }), 54);
+});
+
+Deno.test("commandBus - should run multiple stream handlers for the same command", () => {
+  const commandBus = new CommandBus();
+  commandBus.registerStream(
+    ExampleCommand,
+    (command, _context, next) => {
+      for (let i = 0; i < command.data; i++) {
+        next(i, i === command.data - 1);
+      }
+      return () => {}; // unsubscribe function
+    },
+  );
+
+  const callback1 = spy();
+  commandBus.stream(new ExampleCommand(42), callback1);
+
+  const callback2 = spy();
+  commandBus.stream(new ExampleCommand(24), callback2);
+
+  assertEquals(callback1.calls.length, 42);
+  assertEquals(callback2.calls.length, 24);
 });

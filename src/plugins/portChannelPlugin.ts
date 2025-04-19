@@ -73,7 +73,8 @@ export class PortChannelPlugin extends PortChannel<any>
       const subscribedHandler = this.responseSubscriptions.get(
         responseName,
       )
-        ?.get(id);
+        ?.get(response.id);
+
       if (subscribedHandler) {
         subscribedHandler(response.data, response.done, response.error);
       }

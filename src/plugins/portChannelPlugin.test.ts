@@ -215,3 +215,34 @@ Deno.test("PortChannelPlugin - use local handler if available", async () => {
 
   assertEquals(await promise, 43);
 });
+
+Deno.test("PortChannelPlugin - multiple clients can execute the same stream command", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStream(
+    ExampleCommand,
+    (command, _context, next) => {
+      next(command.data * 2, false);
+      setTimeout(() => {
+        next(command.data * 3, false);
+      }, 100);
+      return () => {};
+    },
+  );
+  const callback1 = spy();
+  const callback2 = spy();
+
+  nodes[1].commandBus.stream(new ExampleCommand(1), callback1);
+  nodes[1].commandBus.stream(new ExampleCommand(2), callback2);
+
+  await delay(2000);
+
+  assertSpyCalls(callback1, 2);
+  assertSpyCalls(callback2, 2);
+
+  assertEquals(callback1.calls[0].args[0], 2);
+  assertEquals(callback1.calls[1].args[0], 3);
+
+  assertEquals(callback2.calls[0].args[0], 4);
+  assertEquals(callback2.calls[1].args[0], 6);
+});
