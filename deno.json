@@ -1,8 +1,17 @@
 {
     "name": "@collidor/command",
-    "version": "5.1.4",
+    "version": "5.2.0",
     "license": "MIT",
     "exports": "./src/main.ts",
+    "compilerOptions": {
+        "lib": [
+            "deno.window",
+            "deno.ns",
+            "dom.iterable",
+            "ESNext",
+            "DOM"
+        ]
+    },
     "publish": {
         "include": [
             "./src/**/*",

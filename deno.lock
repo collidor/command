@@ -15,7 +15,7 @@
     "jsr:@std/internal@^1.0.6": "1.0.6",
     "jsr:@std/path@^1.0.8": "1.0.8",
     "jsr:@std/testing@^1.0.9": "1.0.10",
-    "npm:@collidor/event@4.0.6": "4.0.6",
+    "npm:@collidor/event@4.1.0": "4.1.0",
     "npm:tsup@^8.4.0": "8.4.0_typescript@5.8.2_esbuild@0.25.0",
     "npm:typescript@^5.8.2": "5.8.2"
   },
@@ -89,8 +89,8 @@
     }
   },
   "npm": {
-    "@collidor/event@4.0.6": {
-      "integrity": "sha512-YyUxI1BjG+fscVdb12K/JWNwAsAWC+UGRyEK/0osNOIykKw3zczFaAUDHj/S60Hm+fBzgHKP7vQRIY4D1qJtOg=="
+    "@collidor/event@4.1.0": {
+      "integrity": "sha512-gR0cBD+KkP5w47ZXPTNe6huXIcDyZeUc0gUEoLNJEPXlioaBLIqodc2pqOIQVTAVJw8je4e4TbxhWFbU/S+vaA=="
     },
     "@esbuild/aix-ppc64@0.25.0": {
       "integrity": "sha512-O7vun9Sf8DFjH2UtqK8Ku3LkquL9SZL8OLY1T5NZkA34+wG3OQF7cl4Ql8vdNzM6fzBbYfLaiRLIOZ+2FOCgBQ=="
@@ -679,7 +679,7 @@
     ],
     "packageJson": {
       "dependencies": [
-        "npm:@collidor/event@4.0.6",
+        "npm:@collidor/event@4.1.0",
         "npm:tsup@^8.4.0",
         "npm:typescript@^5.8.2"
       ]
