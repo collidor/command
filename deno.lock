@@ -1,7 +1,6 @@
 {
   "version": "4",
   "specifiers": {
-    "jsr:@collidor/event@^4.0.6": "4.0.6",
     "jsr:@std/assert@*": "1.0.12",
     "jsr:@std/assert@^1.0.10": "1.0.11",
     "jsr:@std/assert@^1.0.11": "1.0.12",
@@ -15,14 +14,11 @@
     "jsr:@std/internal@^1.0.6": "1.0.6",
     "jsr:@std/path@^1.0.8": "1.0.8",
     "jsr:@std/testing@^1.0.9": "1.0.10",
-    "npm:@collidor/event@4.1.1": "4.1.1",
+    "npm:@collidor/event@4.1.2": "4.1.2",
     "npm:tsup@8.5.0": "8.5.0_typescript@5.8.3_esbuild@0.25.5",
     "npm:typescript@5.8.3": "5.8.3"
   },
   "jsr": {
-    "@collidor/event@4.0.6": {
-      "integrity": "80b9775f3ddb3b2a8b9fbe76f9040dfc78f4e21b179e472bab839aa368112e81"
-    },
     "@std/assert@1.0.11": {
       "integrity": "2461ef3c368fe88bc60e186e7744a93112f16fd110022e113a0849e94d1c83c1",
       "dependencies": [
@@ -89,8 +85,8 @@
     }
   },
   "npm": {
-    "@collidor/event@4.1.1": {
-      "integrity": "sha512-FbQNAlhCTR1Dahm3zZg94XKpjOG65jJN37Pkzf5Y/I1PfHl6ZZr0bCRxLxYVXAjb54tMtpNhoDRuRplqQCwWeQ=="
+    "@collidor/event@4.1.2": {
+      "integrity": "sha512-XSXA3/3CBHGJdwrC0lS5YyswEXx82kdv7jn9ODlJB/+ax6iZdIPL2kOc6Xq+FtY5Wd3jNKRhu6FD8XkcpPcWZQ=="
     },
     "@esbuild/aix-ppc64@0.25.5": {
       "integrity": "sha512-9o3TMmpmftaCMepOdA5k/yDw8SfInyzWWTjYTFCX3kPSDJMROQTb8jg+h9Cnwnmm1vOzvxN7gIfB5V2ewpjtGA=="
@@ -721,13 +717,13 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@collidor/event@^4.0.6",
+      "jsr:@collidor/event@^4.1.2",
       "jsr:@std/assert@^1.0.11",
       "jsr:@std/testing@^1.0.9"
     ],
     "packageJson": {
       "dependencies": [
-        "npm:@collidor/event@4.1.1",
+        "npm:@collidor/event@4.1.2",
         "npm:tsup@8.5.0",
         "npm:typescript@5.8.3"
       ]
