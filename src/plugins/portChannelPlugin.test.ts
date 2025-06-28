@@ -13,9 +13,13 @@ function connectPorts(...ports: FakeMessagePort[]) {
   for (const port of ports) {
     port.postMessage = function (this: FakeMessagePort, message: any) {
       this.messages.push(message);
+      this.sentMessages.push(
+        typeof message === "string" ? JSON.parse(message) : message,
+      );
 
       for (const p of ports) {
         if (p === port) continue;
+        p.receivedMessages.push(JSON.parse(message));
         p.onmessage?.({ data: message, currentTarget: p });
       }
     };
@@ -59,6 +63,9 @@ function getNodes<const N extends number>(n: N):
 // A simple FakeMessagePort that implements MessagePortLike for testing.
 class FakeMessagePort implements MessagePortLike {
   public messages: any[] = [];
+  public receivedMessages: any[] = [];
+  public sentMessages: any[] = [];
+
   public onmessage: ((ev: any) => void) | null = null;
   public onmessageerror: ((ev: MessageEvent) => void) | null = null;
 

@@ -1,6 +1,7 @@
 {
   "version": "4",
   "specifiers": {
+    "jsr:@collidor/event@^4.1.2": "4.1.2",
     "jsr:@std/assert@*": "1.0.12",
     "jsr:@std/assert@^1.0.10": "1.0.11",
     "jsr:@std/assert@^1.0.11": "1.0.12",
@@ -19,6 +20,9 @@
     "npm:typescript@5.8.3": "5.8.3"
   },
   "jsr": {
+    "@collidor/event@4.1.2": {
+      "integrity": "cbd82bb6a65dc6a4d9bf925f1fb0ed36104971ded81a547a95ab2340df161345"
+    },
     "@std/assert@1.0.11": {
       "integrity": "2461ef3c368fe88bc60e186e7744a93112f16fd110022e113a0849e94d1c83c1",
       "dependencies": [
