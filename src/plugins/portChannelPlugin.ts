@@ -1,11 +1,10 @@
 import {
-  DataEvent,
+  type DataEvent,
   PortChannel,
   type PortChannelOptions,
-  PortEvents,
 } from "@collidor/event";
 import type { CommandBus, CommandBusPlugin, Type } from "../commandBus.ts";
-import { Command, COMMAND_RETURN } from "../commandModel.ts";
+import type { Command, COMMAND_RETURN } from "../commandModel.ts";
 
 type CommandDataEvent = {
   id: string;
@@ -25,6 +24,11 @@ type CommandUnsubscribeEvent = {
 
 type CommandAckEvent = {
   id: string;
+};
+
+export type PortChannelPluginMetadata = {
+  commandData: CommandDataEvent;
+  dataEvent: DataEvent;
 };
 
 export type PortChannelPluginOptions = PortChannelOptions & {
@@ -187,7 +191,11 @@ export class PortChannelPlugin extends PortChannel<any>
             command.name,
             commandData.data,
           );
-          let result = handler(cmd, this.context);
+          const meta: PortChannelPluginMetadata = {
+            commandData,
+            dataEvent,
+          };
+          let result = handler(cmd, this.context, meta);
           if (result instanceof Promise) {
             result = await result;
           }
@@ -322,7 +330,13 @@ export class PortChannelPlugin extends PortChannel<any>
           command.name,
           commandData.data,
         );
-        const iterator = asyncHandler(cmd, this.context);
+
+        const meta: PortChannelPluginMetadata = {
+          commandData,
+          dataEvent,
+        };
+
+        const iterator = asyncHandler(cmd, this.context, meta);
 
         if (!unsubscriptions.has(commandData.id)) {
           unsubscriptions.set(commandData.id, () => {
@@ -411,6 +425,12 @@ export class PortChannelPlugin extends PortChannel<any>
           command.name,
           commandData.data,
         );
+
+        const meta: PortChannelPluginMetadata = {
+          commandData,
+          dataEvent,
+        };
+
         const unsubscribe = handler(
           cmd,
           this.context,
@@ -443,6 +463,7 @@ export class PortChannelPlugin extends PortChannel<any>
               );
             }
           },
+          meta,
         );
 
         this.subscribe(

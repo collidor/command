@@ -9,7 +9,11 @@ export type PluginHandler<
 > = (
   command: C,
   context: TContext,
-  handler?: (command: C, context: TContext) => C[COMMAND_RETURN],
+  handler?: (
+    command: C,
+    context: TContext,
+    meta?: Record<string, any>,
+  ) => C[COMMAND_RETURN],
 ) => R;
 
 export type StreamPluginHandler<
@@ -70,7 +74,7 @@ export class CommandBus<
 > {
   public handlers: Map<
     string,
-    (command: Command, context: TContext) => unknown
+    (command: Command, context: TContext, meta?: Record<string, any>) => unknown
   > = new Map();
 
   public streamHandlers: Map<
@@ -79,6 +83,7 @@ export class CommandBus<
       command: Command,
       context: TContext,
       next: (data: Command[COMMAND_RETURN], done: boolean, error?: any) => void,
+      meta?: Record<string, any>,
     ) => (() => void) | Promise<() => void> | void
   > = new Map();
 
@@ -87,6 +92,7 @@ export class CommandBus<
     (
       command: Command,
       context: TContext,
+      meta?: Record<string, any>,
     ) => AsyncIterableIterator<Command[COMMAND_RETURN]>
   > = new Map();
 
@@ -111,6 +117,7 @@ export class CommandBus<
     handler: (
       command: C,
       context: TContext,
+      meta?: Record<string, any>,
     ) =>
       | (TPlugin extends { handler: (...args: any[]) => any }
         ? ReturnTypeMapper<
@@ -301,6 +308,7 @@ export class CommandBus<
       command: C,
       context: TContext,
       next: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
+      meta?: Record<string, any>,
     ) => (() => void) | Promise<() => void> | void,
   ) {
     this.commandConstructor.set(command.name, command);
@@ -319,6 +327,7 @@ export class CommandBus<
     handler: (
       command: C,
       context: TContext,
+      meta?: Record<string, any>,
     ) => AsyncIterable<C[COMMAND_RETURN]>,
   ) {
     this.commandConstructor.set(command.name, command);

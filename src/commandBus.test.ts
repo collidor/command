@@ -289,3 +289,150 @@ Deno.test("commandBus - should run multiple stream handlers for the same command
   assertEquals(callback1.calls.length, 42);
   assertEquals(callback2.calls.length, 24);
 });
+
+Deno.test("commandBus - stream handler should igore output if done is sent twice as true", () => {
+  const commandBus = new CommandBus();
+  commandBus.registerStream(
+    ExampleCommand,
+    (command, _context, next) => {
+      for (let i = 0; i < command.data; i++) {
+        next(i, i === command.data - 1);
+      }
+      // Send two extra times
+      next(command.data, true);
+      next(command.data, true);
+      return () => {}; // unsubscribe function
+    },
+  );
+
+  const callback = spy();
+  const unsubscribe = commandBus.stream(new ExampleCommand(10), callback);
+
+  unsubscribe();
+
+  assertEquals(callback.calls.length, 10);
+});
+
+Deno.test("commandBus - stream handler should unsubscribe if abortController signal is emitted", async () => {
+  const commandBus = new CommandBus();
+  const abortController = new AbortController();
+
+  commandBus.registerStream(
+    ExampleCommand,
+    (_command, _context, next) => {
+      let i = 0;
+      const interval = setInterval(() => {
+        next(i++, false);
+      }, 10);
+      return () => {
+        clearInterval(interval);
+      };
+    },
+  );
+
+  const callback = spy();
+  const unsubscribe = commandBus.stream(
+    new ExampleCommand(10),
+    callback,
+    { signal: abortController.signal },
+  );
+
+  await sleep(50);
+
+  const callsBeforeAbort = callback.calls.length;
+
+  abortController.abort();
+
+  const callsAfterAbort = callback.calls.length;
+
+  await sleep(50); // Wait for the unsubscribe to take effect
+
+  assertEquals(callsBeforeAbort, callsAfterAbort);
+  unsubscribe();
+});
+
+Deno.test("commandBus - should call plugin streamHandler unsubscribe if abortController signal is emitted", async () => {
+  const abortController = new AbortController();
+
+  const plugin: CommandBusPlugin<Command, any, COMMAND_RETURN> = {
+    handler: (command, context, next) => {
+      return next?.(command, context);
+    },
+    streamHandler: (_command, _context, callback) => {
+      let i = 0;
+      const interval = setInterval(() => {
+        callback(i++, false);
+      }, 10);
+
+      return () => {
+        clearInterval(interval);
+      };
+    },
+  };
+
+  const commandBus = new CommandBus({
+    plugin,
+  });
+
+  const callback = spy();
+  const unsubscribe = commandBus.stream(
+    new ExampleCommand(10),
+    callback,
+    {},
+    abortController.signal,
+  );
+
+  await sleep(50);
+
+  const callsBeforeAbort = callback.calls.length;
+
+  abortController.abort();
+
+  await sleep(50); // Wait for the unsubscribe to take effect
+
+  const callsAfterAbort = callback.calls.length;
+
+  assertEquals(callsBeforeAbort, callsAfterAbort);
+  unsubscribe();
+});
+
+Deno.test("commandBus - handler should receive plugin metadata", () => {
+  const context = {
+    custom: 100,
+  };
+
+  const metadata = {
+    info: "This is some metadata",
+    timestamp: Date.now(),
+  };
+
+  const plugin: CommandBusPlugin<
+    Command,
+    typeof context,
+    Command[COMMAND_RETURN]
+  > = {
+    handler: (command, c, h) => h?.(command, c, metadata),
+  };
+
+  const commandBus = new CommandBus({
+    context,
+    plugin,
+  });
+
+  let receivedMeta: any;
+  commandBus.register(ExampleCommand, (command, context, meta) => {
+    receivedMeta = meta;
+    return command.data + context.custom;
+  });
+
+  assertEquals(
+    commandBus.execute(new ExampleCommand(42)),
+    142,
+  );
+
+  assertEquals(receivedMeta, metadata);
+});
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

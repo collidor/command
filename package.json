@@ -1,6 +1,6 @@
 {
     "name": "@collidor/command",
-    "version": "5.2.3",
+    "version": "5.2.4",
     "description": "A small library to create, register and execute commands.",
     "repository": {
         "type": "git",

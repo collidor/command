@@ -5,7 +5,7 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Command } from "../commandModel.ts";
 import { assertSpyCalls, spy } from "@std/testing/mock";
 
-function delay(ms: number): Promise<void> {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -136,7 +136,7 @@ Deno.test("PortChannelPlugin - command times out", async () => {
   });
   const promise = commandBus.execute(new ExampleCommand(42)).catch((e) => e);
 
-  await delay(1000);
+  await sleep(1000);
 
   assert((await promise).message.includes("Timeout"));
 });
@@ -242,7 +242,7 @@ Deno.test("PortChannelPlugin - multiple clients can execute the same stream comm
   nodes[1].commandBus.stream(new ExampleCommand(1), callback1);
   nodes[1].commandBus.stream(new ExampleCommand(2), callback2);
 
-  await delay(2000);
+  await sleep(2000);
 
   assertSpyCalls(callback1, 2);
   assertSpyCalls(callback2, 2);
@@ -262,7 +262,7 @@ Deno.test("PortChannelPlugin - multiple clients can execute the same async strea
     _context,
   ) {
     yield command.data * 2;
-    await delay(100);
+    await sleep(100);
     yield command.data * 3;
   });
 
@@ -272,7 +272,7 @@ Deno.test("PortChannelPlugin - multiple clients can execute the same async strea
   nodes[1].commandBus.stream(new ExampleCommand(1), callback1);
   nodes[1].commandBus.stream(new ExampleCommand(2), callback2);
 
-  await delay(2000);
+  await sleep(2000);
 
   assertSpyCalls(callback1, 3);
   assertSpyCalls(callback2, 3);
@@ -318,7 +318,7 @@ Deno.test("PortChannelPlubin - should stop if unsubscribe is called", async () =
     },
   );
 
-  await delay(500);
+  await sleep(500);
 
   assertEquals(result, [0]);
 });
