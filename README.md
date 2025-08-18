@@ -1,3 +1,6 @@
+> [!WARNING]
+> Moved to https://github.com/collidor/collidor
+
 [![Codecov](https://codecov.io/gh/collidor/command/branch/main/graph/badge.svg)](https://codecov.io/gh/collidor/command)
 [![npm version](https://img.shields.io/npm/v/@collidor/command)](https://www.npmjs.com/package/@collidor/command)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
