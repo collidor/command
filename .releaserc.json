@@ -6,18 +6,11 @@
         "@semantic-release/commit-analyzer",
         "@semantic-release/release-notes-generator",
         "@semantic-release/changelog",
-        [
-            "@semantic-release/npm",
-            {
-                "npmPublish": false
-            }
-        ],
+        "@semantic-release/npm",
         [
             "@semantic-release/exec",
             {
-                "prepareCmd": "deno run --allow-read --allow-write ./sync.ts",
-                "publishCmd": "npm publish --provenance --access public"
-            }
+                "prepareCmd": "deno run --allow-read --allow-write ./sync.ts" }
         ],
         [
             "@semantic-release/git",
