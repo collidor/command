@@ -1,6 +1,6 @@
 {
     "name": "@collidor/command",
-    "version": "7.0.1",
+    "version": "1.0.0",
     "license": "MIT",
     "exports": "./src/main.ts",
     "compilerOptions": {

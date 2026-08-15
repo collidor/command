@@ -1,50 +1,50 @@
 {
-    "name":  "@collidor/command",
-    "version":  "7.0.1",
-    "description":  "A small library to create, register and execute commands.",
-    "repository":  {
-                       "type":  "git",
-                       "url":  "https://github.com/collidor/command.git"
-                   },
-    "publishConfig":  {
-                          "access":  "public"
-                      },
-    "type":  "module",
-    "main":  "dist/main.cjs",
-    "module":  "dist/main.js",
-    "types":  "dist/main.d.ts",
-    "scripts":  {
-                    "build":  "tsup",
-                    "dev":  "tsup --watch",
-                    "test":  "deno test",
-                    "lint":  "oxlint",
-                    "test:coverage":  "deno test --coverage && deno coverage --lcov --output=./coverage/lcov.info && deno coverage --html",
-                    "publish:jsr":  "deno run --allow-all ./publishJsr.ts",
-                    "sync:jsr":  "deno run --allow-read --allow-write ./sync.ts",
-                    "release":  "semantic-release"
-                },
-    "keywords":  [
-                     "command",
-                     "command bus",
-                     "command handler"
-                 ],
-    "author":  "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
-    "license":  "MIT",
-    "devDependencies":  {
-                            "@collidor/event":  "^4.3.3",
-                            "oxlint":  "^1.78.0",
-                            "tsup":  "8.5.0",
-                            "typescript":  "5.9.2",
-                            "semantic-release":  "^24.2.3",
-                            "@semantic-release/changelog":  "^6.0.3",
-                            "@semantic-release/git":  "^10.0.1",
-                            "@semantic-release/exec":  "^6.0.3",
-                            "@swc/core":  "^1.13.5"
-                        },
-    "peerDependencies":  {
-                             "@collidor/event":  "^4.3.3"
-                         },
-    "engines":  {
-                    "node":  ">=24.0.0"
-                }
+    "name": "@collidor/command",
+    "version": "1.0.0",
+    "description": "A small library to create, register and execute commands.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/collidor/command.git"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "type": "module",
+    "main": "dist/main.cjs",
+    "module": "dist/main.js",
+    "types": "dist/main.d.ts",
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "test": "deno test",
+        "lint": "oxlint",
+        "test:coverage": "deno test --coverage && deno coverage --lcov --output=./coverage/lcov.info && deno coverage --html",
+        "publish:jsr": "deno run --allow-all ./publishJsr.ts",
+        "sync:jsr": "deno run --allow-read --allow-write ./sync.ts",
+        "release": "semantic-release"
+    },
+    "keywords": [
+        "command",
+        "command bus",
+        "command handler"
+    ],
+    "author": "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
+    "license": "MIT",
+    "devDependencies": {
+        "@collidor/event": "^4.3.3",
+        "oxlint": "^1.78.0",
+        "tsup": "8.5.0",
+        "typescript": "5.9.2",
+        "semantic-release": "^24.2.3",
+        "@semantic-release/changelog": "^6.0.3",
+        "@semantic-release/git": "^10.0.1",
+        "@semantic-release/exec": "^6.0.3",
+        "@swc/core": "^1.13.5"
+    },
+    "peerDependencies": {
+        "@collidor/event": "^4.3.3"
+    },
+    "engines": {
+        "node": ">=24.0.0"
+    }
 }
