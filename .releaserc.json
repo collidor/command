@@ -12,7 +12,12 @@
                 "prepareCmd": "deno run --allow-read --allow-write ./sync.ts"
             }
         ],
-        "@semantic-release/npm",
+        [
+            "@semantic-release/npm",
+            {
+                "provenance": true
+            }
+        ],
         [
             "@semantic-release/git",
             {
