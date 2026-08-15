@@ -49,6 +49,7 @@ jobs:
               run: npx semantic-release
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  NPM_TOKEN: "00000000-0000-0000-0000-000000000000"
 
             - name: Publish to JSR
               run: npx jsr publish --allow-slow-types --allow-dirty
