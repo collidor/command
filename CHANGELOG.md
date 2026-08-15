@@ -1,3 +1,10 @@
+## [7.0.3](https://github.com/collidor/command/compare/v7.0.2...v7.0.3) (2026-08-15)
+
+
+### Bug Fixes
+
+* **ci:** remove registry-url to prevent setup-node from creating broken .npmrc that blocks OIDC ([6b6b4c8](https://github.com/collidor/command/commit/6b6b4c8686c48a350d92eba68b3b32b6d086a8e3))
+
 ## [7.0.2](https://github.com/collidor/command/compare/v7.0.1...v7.0.2) (2026-08-15)
 
 
