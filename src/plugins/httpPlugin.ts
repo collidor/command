@@ -1,11 +1,18 @@
-import type { CommandBusPlugin, PluginHandler } from "../commandBus.ts";
+import type {
+  AsyncCommandBusPlugin,
+  AsyncPluginHandler,
+} from "../commandBusTypes.ts";
 import type { Command, COMMAND_RETURN } from "../commandModel.ts";
-import type { CommandBus } from "../main.ts";
+import type { AsyncCommandBus } from "../asyncCommandBus.ts";
 
 type ContextType = Record<string, any>;
+
 type ArgHeaders<TContext extends ContextType = ContextType> =
   | (Record<string, string> | Headers)
-  | ((command: Command, context: TContext) => Record<string, string> | Headers);
+  | ((
+    command: Command,
+    context: TContext,
+  ) => Record<string, string> | Headers);
 
 function parseHeaders<TContext extends ContextType = ContextType>(
   headers: ArgHeaders<TContext> | undefined,
@@ -37,13 +44,13 @@ function parseHeaders<TContext extends ContextType = ContextType>(
   return newHeaders;
 }
 
-export type Serializer<S extends BodyInit> = {
+export type CommandSerializer<S extends BodyInit> = {
   serialize: (data: any, headers: Headers) => S;
   deserializeResponse: (response: Response) => Promise<any>;
   deserializeRequest: (request: Request) => Promise<any>;
 };
 
-const defaultSerializer: Serializer<string> = {
+const defaultSerializer: CommandSerializer<string> = {
   serialize: (data, headers) => {
     if (!headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
@@ -59,6 +66,9 @@ const defaultSerializer: Serializer<string> = {
   deserializeRequest: (request) => request.json(),
 };
 
+/**
+ * A plugin that forwards commands via HTTP fetch if no local handler is found.
+ */
 export function httpClientPlugin<
   TContext extends ContextType = ContextType,
   TSerializer extends BodyInit = string,
@@ -69,27 +79,31 @@ export function httpClientPlugin<
     | ((command: Command, context: TContext) => string | URL),
   options?: {
     headers?: ArgHeaders<TContext>;
-    serializer?: Serializer<TSerializer>;
+    serializer?: CommandSerializer<TSerializer>;
     requestInit?: RequestInit;
   },
-): CommandBusPlugin<Command, TContext, Promise<Command[COMMAND_RETURN]>> & {
+): AsyncCommandBusPlugin<Command, TContext> & {
   defaultHeaders: Headers;
 } {
   const defaultHeaders = new Headers();
 
-  const handler: PluginHandler<
-    Command,
-    TContext,
-    Promise<Command[COMMAND_RETURN]>
-  > = async (command, context, handler) => {
-    if (handler) {
-      return Promise.resolve(handler(command, context));
+  const handler: AsyncPluginHandler<Command, TContext> = async (
+    command,
+    context,
+    next,
+  ) => {
+    // 1. Prefer local execution if available
+    if (next) {
+      return next(command, context);
     }
+
+    // 2. Fallback to HTTP
     const {
       headers = new Headers(),
       serializer = defaultSerializer,
       requestInit = {},
     } = options ?? {};
+
     const url = typeof route === "function" ? route(command, context) : route;
 
     const headersValue = parseHeaders(
@@ -111,6 +125,7 @@ export function httpClientPlugin<
       credentials: "same-origin",
       ...requestInit,
     });
+
     if (!response.ok) {
       throw new Error(`HTTP error: ${response.status}`);
     }
@@ -120,24 +135,28 @@ export function httpClientPlugin<
   return { handler, defaultHeaders };
 }
 
+/**
+ * A plugin that acts as a receiver for HTTP requests to execute commands on the bus.
+ */
 export function httpServerPlugin<
   TContext extends ContextType = ContextType,
   TSerializer extends BodyInit = string,
 >(
   options?: {
-    serializer?: Serializer<TSerializer>;
+    serializer?: CommandSerializer<TSerializer>;
   },
-): CommandBusPlugin<Command, TContext, Promise<Command[COMMAND_RETURN]>> & {
+): AsyncCommandBusPlugin<Command, TContext> & {
   getCommandFromRequest: (
     request: Request,
   ) => Promise<Command>;
-  handleRequest: (request: Request, context?: TContext) => Promise<
-    Command[COMMAND_RETURN]
-  >;
+  handleRequest: (
+    request: Request,
+    context?: TContext,
+  ) => Promise<Command[COMMAND_RETURN]>;
 } {
-  let commandBus: CommandBus<TContext> | undefined;
+  let commandBus: AsyncCommandBus<TContext> | undefined;
 
-  function install(commandBusInstance: CommandBus<TContext>) {
+  function install(commandBusInstance: AsyncCommandBus<TContext>) {
     commandBus = commandBusInstance;
   }
 
@@ -147,12 +166,17 @@ export function httpServerPlugin<
     }
     const { serializer = defaultSerializer } = options ?? {};
     const commandObject = await serializer.deserializeRequest(request);
-    const commandCosntructor = commandBus.commandConstructor
-      .get(commandObject.name);
-    if (!commandCosntructor) {
+
+    // Looks up the constructor from the map
+    const commandConstructor = commandBus.commandConstructor.get(
+      commandObject.name,
+    );
+
+    if (!commandConstructor) {
       throw new Error(`Command not found: ${commandObject.name}`);
     }
-    return new commandCosntructor(commandObject.data);
+
+    return new commandConstructor(commandObject.data);
   }
 
   async function handleRequest(request: Request, context?: TContext) {
@@ -161,6 +185,7 @@ export function httpServerPlugin<
     }
     const command = await getCommandFromRequest(request);
 
+    // execute returns a Promise in AsyncCommandBus
     return await commandBus.execute(command, context);
   }
 
@@ -168,9 +193,10 @@ export function httpServerPlugin<
     install,
     getCommandFromRequest,
     handleRequest,
-    handler: (command, context, handler) => {
-      if (handler) {
-        return Promise.resolve(handler(command, context));
+    // The server plugin doesn't usually intercept outgoing commands
+    handler: (_command, _context, next) => {
+      if (next) {
+        return next(_command, _context);
       }
       throw new Error("Not implemented");
     },

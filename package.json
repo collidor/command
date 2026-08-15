@@ -1,20 +1,26 @@
 {
     "name": "@collidor/command",
-    "version": "5.2.4",
+    "version": "7.0.1",
     "description": "A small library to create, register and execute commands.",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/collidor/command.git"
+        "url": "git@github.com:collidor/command.git"
+    },
+    "publishConfig": {
+        "access": "public"
     },
     "type": "module",
     "main": "dist/main.cjs",
     "module": "dist/main.js",
     "types": "dist/main.d.ts",
     "scripts": {
-        "test": "deno test",
         "build": "tsup",
         "dev": "tsup --watch",
-        "test:coverage": "deno eval \"await Deno.remove('./cov_profile', { recursive: true }).catch(() => {})\" && deno test --coverage=cov_profile && deno coverage --html cov_profile"
+        "test": "deno test",
+        "lint": "oxlint",
+        "test:coverage": "deno test --coverage && deno coverage --lcov --output=./coverage/lcov.info && deno coverage --html",
+        "publish:jsr": "deno run --allow-all ./publishJsr.ts",
+        "sync:jsr": "deno run --allow-read --allow-write ./sync.ts"
     },
     "keywords": [
         "command",
@@ -24,11 +30,12 @@
     "author": "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
     "license": "MIT",
     "devDependencies": {
-        "@collidor/event": "4.1.2",
+        "@collidor/event": "^4.3.3",
+        "oxlint": "^1.78.0",
         "tsup": "8.5.0",
-        "typescript": "5.8.3"
+        "typescript": "5.9.2"
     },
     "peerDependencies": {
-        "@collidor/event": "^4.0.3"
+        "@collidor/event": "^4.3.3"
     }
 }

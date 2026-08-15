@@ -1,9 +1,10 @@
 import type { MessagePortLike } from "@collidor/event";
 import { PortChannelPlugin } from "./portChannelPlugin.ts";
-import { CommandBus } from "../commandBus.ts";
+
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Command } from "../commandModel.ts";
 import { assertSpyCalls, spy } from "@std/testing/mock";
+import { AsyncCommandBus } from "../asyncCommandBus.ts";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -30,14 +31,14 @@ function getNodes<const N extends number>(n: N):
   & Array<{
     port: FakeMessagePort;
     portChannelPlugin: PortChannelPlugin;
-    commandBus: CommandBus<any, PortChannelPlugin>;
+    commandBus: AsyncCommandBus<any, PortChannelPlugin>;
   }>
   & { length: N } {
   const ret = [] as any[] as
     & Array<{
       port: FakeMessagePort;
       portChannelPlugin: PortChannelPlugin;
-      commandBus: CommandBus<any, PortChannelPlugin>;
+      commandBus: AsyncCommandBus<any, PortChannelPlugin>;
     }>
     & { length: N };
 
@@ -45,7 +46,7 @@ function getNodes<const N extends number>(n: N):
     const port = new FakeMessagePort(i + "");
     const portChannelPlugin = new PortChannelPlugin();
     portChannelPlugin.addPort(port);
-    const commandBus = new CommandBus({
+    const commandBus = new AsyncCommandBus({
       plugin: portChannelPlugin,
     });
     ret[i] = {
@@ -86,7 +87,7 @@ Deno.test("PortChannelPlugin - install CommandBus", () => {
   const fakePort = new FakeMessagePort();
   portChannelPlugin.addPort(fakePort);
   const context = { test: "test" };
-  const commandBus = new CommandBus({
+  const commandBus = new AsyncCommandBus({
     context,
     plugin: portChannelPlugin,
   });
@@ -125,7 +126,7 @@ Deno.test("PortChannelPlugin - command times out", async () => {
     bufferTimeout: 50,
   });
   portChannelPlugin.addPort(port);
-  const commandBus = new CommandBus({
+  const commandBus = new AsyncCommandBus({
     plugin: portChannelPlugin,
   });
   port.onmessage?.({
@@ -166,11 +167,11 @@ Deno.test("PortChannelPlugin - use local streamHandler if available", async () =
   );
 
   const command = new ExampleCommand(42);
-  const promise = new Promise((resolve) =>
-    nodes[0].commandBus.stream(command, (data) => {
+  const promise = new Promise((resolve) => {
+    return nodes[0].commandBus.stream(command, (data) => {
       resolve(data);
-    })
-  );
+    });
+  });
 
   assertEquals(await promise, 1);
   assertSpyCalls(spy1, 1);
@@ -209,7 +210,7 @@ Deno.test("PortChannelPlugin - use local handler if available", async () => {
   const portChannelPlugin = new PortChannelPlugin();
   const fakePort = new FakeMessagePort();
   portChannelPlugin.addPort(fakePort);
-  const commandBus = new CommandBus({
+  const commandBus = new AsyncCommandBus({
     plugin: portChannelPlugin,
   });
 
@@ -291,7 +292,7 @@ Deno.test("PortChannelPlubin - should stop if unsubscribe is called", async () =
     ExampleCommand,
     (command, _context, next) => {
       let stop = false;
-      const timeouts: number[] = [];
+      const timeouts: any[] = [];
       for (let i = 0; i < command.data; i++) {
         timeouts.push(setTimeout(() => {
           if (stop) {

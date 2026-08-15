@@ -2,7 +2,7 @@ import { assertEquals, assertRejects } from "@std/assert";
 import { resolvesNext, stub } from "@std/testing/mock";
 import { Command } from "../commandModel.ts";
 import { httpClientPlugin, httpServerPlugin } from "./httpPlugin.ts";
-import { CommandBus } from "../commandBus.ts";
+import { AsyncCommandBus } from "../asyncCommandBus.ts";
 
 class ExampleCommand extends Command<number, number> {}
 
@@ -10,7 +10,7 @@ Deno.test("httpClientPlugin - should use local handler if provided", async () =>
   const command = new ExampleCommand(42);
   const plugin = httpClientPlugin("http://example.com");
 
-  const commandBus = new CommandBus({ plugin });
+  const commandBus = new AsyncCommandBus({ plugin });
   commandBus.register(ExampleCommand, (command) => command.data + 1);
   const result = await commandBus.execute(command);
   assertEquals(result, 43);
@@ -27,7 +27,7 @@ Deno.test("httpClientPlugin - should perform HTTP POST and return response JSON"
 
   const command = new ExampleCommand(10);
   const plugin = httpClientPlugin("http://example.com");
-  const commandBus = new CommandBus({ plugin });
+  const commandBus = new AsyncCommandBus({ plugin });
   const result = await commandBus.execute(command);
 
   assertEquals(result, 42);
@@ -74,7 +74,7 @@ Deno.test("httpClientPlugin - should use dynamic route function", async () => {
   const plugin = httpClientPlugin(
     (cmd) => `http://example.com/${cmd.constructor.name}`,
   );
-  const commandBus = new CommandBus({ plugin });
+  const commandBus = new AsyncCommandBus({ plugin });
   const result = await commandBus.execute(command);
   assertEquals(result, 42);
   assertEquals(
@@ -100,7 +100,7 @@ Deno.test("httpClientPlugin - should set custom headers via function", async () 
     },
   );
 
-  const commandBus = new CommandBus({ plugin });
+  const commandBus = new AsyncCommandBus({ plugin });
   const result = await commandBus.execute(command);
   assertEquals(result, 42);
   assertEquals(
@@ -132,7 +132,7 @@ Deno.test("httpClientPlugin - should append the default headers on every request
 
   plugin.defaultHeaders.set("userId", "123");
 
-  const commandBus = new CommandBus({ plugin });
+  const commandBus = new AsyncCommandBus({ plugin });
   const result = await commandBus.execute(command);
   assertEquals(result, 42);
   assertEquals(
@@ -154,7 +154,7 @@ Deno.test("httpClientPlugin - should append the default headers on every request
 Deno.test("httpServerCommand - should wrap synchronous command result", async () => {
   const plugin = httpServerPlugin();
 
-  const bus = new CommandBus({
+  const bus = new AsyncCommandBus({
     plugin,
   });
 
@@ -174,7 +174,7 @@ Deno.test("httpServerCommand - should wrap synchronous command result", async ()
 Deno.test("httpServerCommand - should wrap asynchronous command result", async () => {
   const plugin = httpServerPlugin();
 
-  const bus = new CommandBus({
+  const bus = new AsyncCommandBus({
     plugin,
   });
 
@@ -193,7 +193,7 @@ Deno.test("httpServerCommand - should wrap asynchronous command result", async (
 Deno.test("httpServerCommand - should throw error for synchronous errors", () => {
   const plugin = httpServerPlugin();
 
-  const bus = new CommandBus({
+  const bus = new AsyncCommandBus({
     plugin,
   });
   // Handler that throws an error
@@ -212,7 +212,7 @@ Deno.test("httpServerCommand - should throw error for synchronous errors", () =>
 Deno.test("httpServerCommand - should trhow error object for asynchronous errors", () => {
   const plugin = httpServerPlugin();
 
-  const bus = new CommandBus({
+  const bus = new AsyncCommandBus({
     plugin,
   });
   // Handler that returns a promise that rejects
@@ -230,7 +230,7 @@ Deno.test("httpServerCommand - should trhow error object for asynchronous errors
 Deno.test("httpServerCommand - should pass custom context to command handler", async () => {
   const plugin = httpServerPlugin();
 
-  const bus = new CommandBus({
+  const bus = new AsyncCommandBus({
     plugin,
   });
 
@@ -249,7 +249,7 @@ Deno.test("httpServerCommand - should pass custom context to command handler", a
 
 Deno.test("httpServerCommand - should return error object if no handler registered", async () => {
   const plugin = httpServerPlugin();
-  const _bus = new CommandBus({
+  const _bus = new AsyncCommandBus({
     plugin,
   });
 

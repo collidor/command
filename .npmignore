@@ -3,3 +3,8 @@ deno.lock
 **/*.test.ts
 .github
 !dist
+coverage
+cov_profile
+report
+.turbo
+publishJsr.ts
