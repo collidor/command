@@ -52,4 +52,4 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Publish to JSR
-              run: npx jsr publish --allow-slow-types
+              run: npx jsr publish --allow-slow-types --allow-dirty
