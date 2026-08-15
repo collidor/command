@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/collidor/command/compare/v1.0.2...v1.0.3) (2026-08-15)
+
+
+### Bug Fixes
+
+* publish oidc ([7d0c61d](https://github.com/collidor/command/commit/7d0c61de09624ea7a69eeb9cfe6e218470b1bf06))
+
 ## [1.0.2](https://github.com/collidor/command/compare/v1.0.1...v1.0.2) (2026-08-15)
 
 
