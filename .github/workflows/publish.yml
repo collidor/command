@@ -51,5 +51,18 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   NPM_TOKEN: "00000000-0000-0000-0000-000000000000"
 
+            - name: Publish to NPM
+              run: |
+                  if [ -f .release_flag ]; then
+                    npm publish --provenance --access public
+                  else
+                    echo "No release flag found, skipping publish."
+                  fi
+
             - name: Publish to JSR
-              run: npx jsr publish --allow-slow-types --allow-dirty
+              run: |
+                  if [ -f .release_flag ]; then
+                    npx jsr publish --allow-slow-types --allow-dirty
+                  else
+                    echo "No release flag found, skipping JSR publish."
+                  fi
