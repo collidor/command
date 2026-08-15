@@ -1,0 +1,29 @@
+{
+    "branches": [
+        "main"
+    ],
+    "plugins": [
+        "@semantic-release/commit-analyzer",
+        "@semantic-release/release-notes-generator",
+        "@semantic-release/changelog",
+        [
+            "@semantic-release/exec",
+            {
+                "prepareCmd": "deno run --allow-read --allow-write ./sync.ts"
+            }
+        ],
+        "@semantic-release/npm",
+        [
+            "@semantic-release/git",
+            {
+                "assets": [
+                    "package.json",
+                    "deno.json",
+                    "CHANGELOG.md"
+                ],
+                "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+            }
+        ],
+        "@semantic-release/github"
+    ]
+}
