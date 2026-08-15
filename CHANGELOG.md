@@ -1,3 +1,12 @@
+## [7.0.4](https://github.com/collidor/command/compare/v7.0.3...v7.0.4) (2026-08-15)
+
+
+### Bug Fixes
+
+* **ci:** add dummy NPM_TOKEN to satisfy semantic-release preflight check for OIDC ([ed30460](https://github.com/collidor/command/commit/ed3046019e19cde88c57bf7a1a620c877491969f))
+* **ci:** decouple npm and jsr publish from semantic-release ([eba8cc7](https://github.com/collidor/command/commit/eba8cc7fe6505295c9389916db6262b606a3b34b))
+* **ci:** re-enable native semantic-release npm publishing for OIDC ([a22fe1f](https://github.com/collidor/command/commit/a22fe1f7f015e779ed26614a01154215c77eb8b8))
+
 ## [7.0.3](https://github.com/collidor/command/compare/v7.0.2...v7.0.3) (2026-08-15)
 
 
