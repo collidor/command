@@ -1,3 +1,10 @@
+## [7.0.2](https://github.com/collidor/command/compare/v7.0.1...v7.0.2) (2026-08-15)
+
+
+### Bug Fixes
+
+* **ci:** add --allow-dirty to jsr publish to ignore uncommitted lockfiles ([d8f58c0](https://github.com/collidor/command/commit/d8f58c07e4fc9d67cbe42b9226f5a611278f07b0))
+
 ## [1.0.3](https://github.com/collidor/command/compare/v1.0.2...v1.0.3) (2026-08-15)
 
 
