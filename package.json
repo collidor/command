@@ -18,7 +18,7 @@
                     "dev":  "tsup --watch",
                     "test":  "deno test",
                     "lint":  "oxlint",
-                    "test:coverage":  "deno test --coverage \u0026\u0026 deno coverage --lcov --output=./coverage/lcov.info \u0026\u0026 deno coverage --html",
+                    "test:coverage":  "deno test --coverage && deno coverage --lcov --output=./coverage/lcov.info && deno coverage --html",
                     "publish:jsr":  "deno run --allow-all ./publishJsr.ts",
                     "sync:jsr":  "deno run --allow-read --allow-write ./sync.ts",
                     "release":  "semantic-release"
@@ -28,7 +28,7 @@
                      "command bus",
                      "command handler"
                  ],
-    "author":  "Alykam Burdzaki \u003calykam@gmail.com\u003e (https://alykam.com)",
+    "author":  "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
     "license":  "MIT",
     "devDependencies":  {
                             "@collidor/event":  "^4.3.3",
@@ -42,5 +42,8 @@
                         },
     "peerDependencies":  {
                              "@collidor/event":  "^4.3.3"
-                         }
+                         },
+    "engines":  {
+                    "node":  ">=24.0.0"
+                }
 }
