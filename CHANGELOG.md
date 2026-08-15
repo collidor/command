@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/collidor/command/compare/v1.0.1...v1.0.2) (2026-08-15)
+
+
+### Bug Fixes
+
+* another publish try ([d57c73e](https://github.com/collidor/command/commit/d57c73ece40f7bbd2aac2610a99ca626b7cc1236))
+
 ## [1.0.1](https://github.com/collidor/command/compare/v1.0.0...v1.0.1) (2026-08-15)
 
 
