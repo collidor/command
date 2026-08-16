@@ -1,3 +1,10 @@
+## [7.0.5](https://github.com/collidor/command/compare/v7.0.4...v7.0.5) (2026-08-16)
+
+
+### Bug Fixes
+
+* trigger patch release ([dc21668](https://github.com/collidor/command/commit/dc21668de2189ebdd7b48eb4e3775061ec741ba4))
+
 ## [7.0.4](https://github.com/collidor/command/compare/v7.0.3...v7.0.4) (2026-08-15)
 
 
