@@ -1,5 +1,14 @@
 export { Command, COMMAND_RETURN } from "./commandModel.ts";
 export { CommandBus } from "./commandBus.ts";
+export {
+  CommandHistoryManager,
+  globalCommandHistory,
+  getGlobalCommandHistory,
+  resetGlobalCommandHistory,
+  type CommandHistoryEntry,
+  type CommandHistoryManagerOptions,
+  type ExecuteCommandOptions,
+} from "./commandHistoryManager.ts";
 
 export type {
   AsyncCommandBusPlugin,
@@ -26,3 +35,15 @@ export {
   PortChannelPlugin,
   type PortChannelPluginOptions,
 } from "./plugins/portChannelPlugin.ts";
+
+export {
+  createWindowCustomEventMessageChannel,
+  type WindowCustomEventBridge,
+  WindowCustomEventMessageChannel,
+  WindowCustomEventPlugin,
+  type WindowCustomEventPluginOptions,
+  WindowCustomEventPort,
+  type WindowCustomEventPortOptions,
+  windowCustomEventPlugin,
+} from "./plugins/windowCustomEventPlugin.ts";
+
