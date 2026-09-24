@@ -1,3 +1,16 @@
+# [7.1.0](https://github.com/collidor/command/compare/v7.0.5...v7.1.0) (2026-09-24)
+
+
+### Bug Fixes
+
+* **port-channel-plugin:** implement round-robin candidate rotation, fast ack failover, and remote stream cleanup ([86ce2e3](https://github.com/collidor/command/commit/86ce2e3879d0787293c773d423d7253445545a41))
+* **types:** resolve TS2349 in DTS build ([1f47c03](https://github.com/collidor/command/commit/1f47c0363dec0497aceb8d3cfd20efe28f936738))
+
+
+### Features
+
+* **plugins:** add WindowCustomEventPlugin implementation ([6e33ac1](https://github.com/collidor/command/commit/6e33ac1788dcf0bf0a4276449ff4821680e18e7c))
+
 ## [7.0.5](https://github.com/collidor/command/compare/v7.0.4...v7.0.5) (2026-08-16)
 
 
