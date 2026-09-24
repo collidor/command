@@ -223,7 +223,9 @@ export class WindowCustomEventPort extends EventTarget implements MessagePortLik
     return {
       port,
       disconnect: () => {
-        cleanup?.();
+        if (typeof cleanup === "function") {
+          cleanup();
+        }
         port.close();
       },
     };
