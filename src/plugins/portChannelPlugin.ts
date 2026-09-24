@@ -34,6 +34,7 @@ export type PortChannelPluginMetadata = {
 
 export type PortChannelPluginOptions = PortChannelOptions & {
   commandTimeout?: number;
+  ackTimeout?: number;
 };
 
 const getResponseName = (name: string): string => `${name}_Response`;
@@ -62,23 +63,34 @@ export class PortChannelPlugin extends PortChannel<any>
   > = new Map();
 
   protected timeout = 5000;
+  protected ackTimeout = 500;
 
   constructor(options?: PortChannelPluginOptions) {
     super(options);
     if (options?.commandTimeout) {
       this.timeout = options.commandTimeout;
     }
+    if (options?.ackTimeout !== undefined) {
+      this.ackTimeout = options.ackTimeout;
+    } else if (options?.commandTimeout) {
+      this.ackTimeout = Math.min(500, options.commandTimeout);
+    }
   }
 
-  // ... (removeSubscription and addSubscription helper methods remain unchanged) ...
   protected removeSubscription(
     name: string,
     id: string,
     callback: (response: CommandResponseEvent) => void,
     unsubscribeCallback: (response: CommandResponseEvent) => void,
+    ackCallback?: (ackEvent: CommandAckEvent) => void,
   ): void {
     const responseName = getResponseName(name);
     const unsubscribeName = getUnsubscribeName(name);
+    const ackName = getAckName(name);
+
+    if (ackCallback) {
+      this.unsubscribe(ackName, ackCallback);
+    }
 
     this.responseSubscriptions.get(responseName)?.delete(id);
     if (this.responseSubscriptions.get(responseName)?.size === 0) {
@@ -93,10 +105,37 @@ export class PortChannelPlugin extends PortChannel<any>
     id: string,
     handler: (data: any, done: boolean, error?: any) => void,
     onAckFail: () => void,
-  ): void {
+    target?: string,
+    responseTimeout?: number,
+  ): () => void {
     const responseName = getResponseName(name);
     const unsubscribeName = getUnsubscribeName(name);
     const ackName = getAckName(name);
+
+    let ackCallback: ((ackEvent: CommandAckEvent) => void) | undefined;
+    let ackTimer: any;
+    let responseTimer: any;
+
+    const cleanup = () => {
+      if (ackTimer) {
+        clearTimeout(ackTimer);
+        ackTimer = undefined;
+      }
+      if (responseTimer) {
+        clearTimeout(responseTimer);
+        responseTimer = undefined;
+      }
+      if (ackCallback) {
+        this.unsubscribe(ackName, ackCallback);
+        ackCallback = undefined;
+      }
+      this.removeSubscription(
+        name,
+        id,
+        callback,
+        unsubscribeCallback,
+      );
+    };
 
     const callback = (response: CommandResponseEvent) => {
       const subscribedHandler = this.responseSubscriptions.get(responseName)
@@ -105,29 +144,63 @@ export class PortChannelPlugin extends PortChannel<any>
         subscribedHandler(response.data, response.done, response.error);
       }
       if (response.done || !subscribedHandler) {
-        this.removeSubscription(name, id, callback, unsubscribeCallback);
+        cleanup();
       }
     };
 
     const unsubscribeCallback = (response: CommandUnsubscribeEvent) => {
       if (response.id === id) {
-        this.removeSubscription(name, id, callback, unsubscribeCallback);
+        cleanup();
       }
     };
 
-    const timer = setTimeout(() => {
-      this.removeSubscription(name, id, callback, unsubscribeCallback);
-      this.publish(unsubscribeName, { id } as CommandUnsubscribeEvent, {
-        singleConsumer: true,
-      });
-      onAckFail();
-    }, this.timeout);
-
-    this.subscribe(ackName, (ackEvent: CommandAckEvent) => {
-      if (ackEvent.id === id) {
-        clearTimeout(timer);
+    ackTimer = setTimeout(() => {
+      cleanup();
+      if (
+        this.portSubscriptions.has(unsubscribeName) ||
+        this.sourceSubscriptions.has(unsubscribeName)
+      ) {
+        this.publish(unsubscribeName, { id } as CommandUnsubscribeEvent, {
+          singleConsumer: true,
+          ...(target ? { target } : {}),
+        });
       }
-    });
+      onAckFail();
+    }, this.ackTimeout);
+
+    ackCallback = (ackEvent: CommandAckEvent) => {
+      if (ackEvent.id === id) {
+        if (ackTimer) {
+          clearTimeout(ackTimer);
+          ackTimer = undefined;
+        }
+        if (ackCallback) {
+          this.unsubscribe(ackName, ackCallback);
+          ackCallback = undefined;
+        }
+        if (responseTimeout !== undefined) {
+          responseTimer = setTimeout(() => {
+            cleanup();
+            if (
+              this.portSubscriptions.has(unsubscribeName) ||
+              this.sourceSubscriptions.has(unsubscribeName)
+            ) {
+              this.publish(unsubscribeName, { id } as CommandUnsubscribeEvent, {
+                singleConsumer: true,
+                ...(target ? { target } : {}),
+              });
+            }
+            handler(
+              null,
+              true,
+              new Error("Timeout waiting for command response"),
+            );
+          }, responseTimeout);
+        }
+      }
+    };
+
+    this.subscribe(ackName, ackCallback);
 
     if (!this.responseSubscriptions.has(responseName)) {
       this.responseSubscriptions.set(responseName, new Map());
@@ -135,6 +208,8 @@ export class PortChannelPlugin extends PortChannel<any>
       this.subscribe(unsubscribeName, unsubscribeCallback);
     }
     this.responseSubscriptions.get(responseName)?.set(id, handler);
+
+    return cleanup;
   }
 
   protected getCommandInstance(name: string, data: any): Command {
@@ -153,7 +228,7 @@ export class PortChannelPlugin extends PortChannel<any>
   }
 
   // --- REGISTER ---
-  register(command: Type<Command>) {
+  register(command: Type<Command>): void {
     // Accessing handlers from BaseCommandBus (via AsyncCommandBus)
     // Note: Ensure handlers is 'public' in BaseCommandBus
     const handler = this.commandBus.handlers.get(command.name);
@@ -230,23 +305,89 @@ export class PortChannelPlugin extends PortChannel<any>
 
     // 2. Remote Execution via PortChannel
     const { promise, resolve, reject } = Promise.withResolvers();
-    const id = crypto.randomUUID();
-
-    this.addSubscription(
-      command.constructor.name,
-      id,
-      (data, done, error) => {
-        if (error) reject(error);
-        else if (done) resolve(data);
-      },
-      () => reject(new Error("Timeout waiting for command ack")),
+    const commandName = command.constructor.name;
+    const candidates = Array.from(
+      this.sourceSubscriptions.get(commandName) ?? [],
     );
 
-    this.publish(
-      command.constructor.name,
-      { id, data: command.data } as CommandDataEvent,
-      { singleConsumer: true },
-    );
+    if (candidates.length <= 1) {
+      const id = crypto.randomUUID();
+      const target = candidates[0];
+
+      this.addSubscription(
+        commandName,
+        id,
+        (data, done, error) => {
+          if (error) reject(error);
+          else if (done) resolve(data);
+        },
+        () => reject(new Error("Timeout waiting for command ack")),
+        target,
+        this.timeout,
+      );
+
+      this.publish(
+        commandName,
+        { id, data: command.data } as CommandDataEvent,
+        {
+          singleConsumer: true,
+          ...(target ? { target } : {}),
+        },
+      );
+
+      return promise as Promise<any>;
+    }
+
+    // Multi-candidate round-robin & failover flow
+    const startIndex = (this.roundRobinIndices.get(commandName) || 0) % candidates.length;
+    this.roundRobinIndices.set(commandName, startIndex + 1);
+
+    const orderedCandidates = [
+      ...candidates.slice(startIndex),
+      ...candidates.slice(0, startIndex),
+    ];
+
+    let candidateIndex = 0;
+
+    const tryNext = () => {
+      if (candidateIndex >= orderedCandidates.length) {
+        reject(
+          new Error(
+            `Timeout waiting for command ack (all ${orderedCandidates.length} candidates failed)`,
+          ),
+        );
+        return;
+      }
+
+      const target = orderedCandidates[candidateIndex++];
+      const id = crypto.randomUUID();
+
+      this.addSubscription(
+        commandName,
+        id,
+        (data, done, error) => {
+          if (error) reject(error);
+          else if (done) resolve(data);
+        },
+        () => {
+          // Candidate failed to ACK within ackTimeout -> failover to next candidate!
+          tryNext();
+        },
+        target,
+        this.timeout,
+      );
+
+      this.publish(
+        commandName,
+        { id, data: command.data } as CommandDataEvent,
+        {
+          singleConsumer: true,
+          target,
+        },
+      );
+    };
+
+    tryNext();
 
     return promise as Promise<any>;
   }
@@ -291,6 +432,11 @@ export class PortChannelPlugin extends PortChannel<any>
         if (!unsubscriptions.has(commandData.id)) {
           unsubscriptions.set(commandData.id, () => {
             unsubscribed = true;
+            try {
+              iterator.return?.();
+            } catch {
+              // ignore
+            }
             this.publish(
               unsubscribeName,
               { id: commandData.id } as CommandUnsubscribeEvent,
@@ -450,7 +596,7 @@ export class PortChannelPlugin extends PortChannel<any>
       next(data, done, error);
     };
 
-    this.addSubscription(
+    const cancelSubscription = this.addSubscription(
       command.constructor.name,
       instanceId,
       remoteResponseCallback,
@@ -464,6 +610,7 @@ export class PortChannelPlugin extends PortChannel<any>
     );
 
     const doUnsubscribe = () => {
+      cancelSubscription();
       this.publish(
         unsubscribeName,
         { id: instanceId } as CommandUnsubscribeEvent,

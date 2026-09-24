@@ -70,7 +70,19 @@ export class WindowCustomEventPort extends EventTarget implements MessagePortLik
       this.eventName,
       this.handleCustomEvent as EventListener,
     );
+
+    if (
+      typeof globalThis !== "undefined" &&
+      typeof globalThis.addEventListener === "function"
+    ) {
+      globalThis.addEventListener("pagehide", this.handleUnload);
+      globalThis.addEventListener("beforeunload", this.handleUnload);
+    }
   }
+
+  private handleUnload = (): void => {
+    this.close();
+  };
 
   private handleCustomEvent = (event: Event): void => {
     if (this.isClosed) return;
@@ -162,10 +174,36 @@ export class WindowCustomEventPort extends EventTarget implements MessagePortLik
   public close(): void {
     if (this.isClosed) return;
     this.isClosed = true;
+
+    try {
+      const closePayload: WindowCustomEventPayload = {
+        source: this.id,
+        target: this.peerId,
+        data: JSON.stringify({ type: "closeEvent", source: this.id }),
+      };
+      this.target.dispatchEvent(
+        new CustomEvent(this.eventName, {
+          detail: closePayload,
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    } catch {
+      // ignore
+    }
+
     this.target.removeEventListener(
       this.eventName,
       this.handleCustomEvent as EventListener,
     );
+
+    if (
+      typeof globalThis !== "undefined" &&
+      typeof globalThis.removeEventListener === "function"
+    ) {
+      globalThis.removeEventListener("pagehide", this.handleUnload);
+      globalThis.removeEventListener("beforeunload", this.handleUnload);
+    }
   }
 
   public [Symbol.dispose](): void {

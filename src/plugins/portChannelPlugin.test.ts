@@ -323,3 +323,53 @@ Deno.test("PortChannelPlubin - should stop if unsubscribe is called", async () =
 
   assertEquals(result, [0]);
 });
+
+Deno.test("PortChannelPlugin - cleans up ack listeners and response subscriptions after execution", async () => {
+  const nodes = getNodes(2);
+  nodes[0].commandBus.register(ExampleCommand, (cmd) => cmd.data * 2);
+
+  const res = await nodes[1].commandBus.execute(new ExampleCommand(21));
+  assertEquals(res, 42);
+
+  // Verify ackName listeners are empty
+  const ackName = "ExampleCommand_Ack";
+  const ackListeners = nodes[1].portChannelPlugin.listeners.get(ackName) ?? [];
+  assertEquals(ackListeners.length, 0);
+
+  // Verify responseSubscriptions has no leftover entries
+  const responseName = "ExampleCommand_Response";
+  assertEquals(
+    nodes[1].portChannelPlugin["responseSubscriptions"].has(responseName),
+    false,
+  );
+});
+
+Deno.test("PortChannelPlugin - fails over to next candidate when first candidate fails to ACK", async () => {
+  const nodes = getNodes(3);
+  nodes[2].portChannelPlugin["ackTimeout"] = 100;
+
+  // Node 1 is a healthy candidate
+  nodes[1].commandBus.register(ExampleCommand, (cmd) => cmd.data * 10);
+
+  // Inject a silent candidate ahead of Node 1 in sourceSubscriptions
+  const silentCandidateId = "silent-dead-node";
+  // Map silent candidate to a port so publish can attempt delivery
+  nodes[2].portChannelPlugin.idPorts.set(
+    silentCandidateId,
+    new Map([[nodes[0].port, 1]]),
+  );
+  nodes[2].portChannelPlugin.sourceSubscriptions.set(
+    "ExampleCommand",
+    new Set([silentCandidateId, nodes[1].portChannelPlugin.id]),
+  );
+
+  const start = Date.now();
+  const result = await nodes[2].commandBus.execute(new ExampleCommand(7));
+  const duration = Date.now() - start;
+
+  assertEquals(result, 70);
+  // Failover waited ~100ms for silent candidate, then immediately succeeded with Node 1
+  assert(duration >= 90, `Expected duration >= 90ms, got ${duration}ms`);
+  assert(duration < 1000, `Expected duration < 1000ms, got ${duration}ms`);
+});
+
