@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { spy } from "@std/testing/mock";
 import { Command } from "./commandModel.ts";
 import { CommandBus } from "./commandBus.ts"; // The Sync Bus
@@ -142,3 +142,171 @@ Deno.test("CommandBus (Sync) - Plugins", async (t) => {
     assertEquals(receivedMeta, metadata);
   });
 });
+
+Deno.test("CommandBus (Sync) - Availability & Readiness", async (t) => {
+  class CommandA extends Command<string, string> {}
+  class CommandB extends Command<number, number> {}
+
+  await t.step("isAvailable should report correct status", () => {
+    const bus = new CommandBus();
+    assertEquals(bus.isAvailable(CommandA), false);
+    assertEquals(bus.isAvailable("CommandA"), false);
+    assertEquals(bus.isAvailable([CommandA, CommandB]), false);
+
+    bus.register(CommandA, (cmd) => cmd.data);
+    assertEquals(bus.isAvailable(CommandA), true);
+    assertEquals(bus.isAvailable("CommandA"), true);
+    assertEquals(bus.isAvailable([CommandA]), true);
+    assertEquals(bus.isAvailable([CommandA, CommandB]), false);
+
+    bus.register(CommandB, (cmd) => cmd.data);
+    assertEquals(bus.isAvailable([CommandA, CommandB]), true);
+
+    const removed = bus.unregister(CommandA);
+    assertEquals(removed, true);
+    assertEquals(bus.isAvailable(CommandA), false);
+    assertEquals(bus.isAvailable([CommandA, CommandB]), false);
+    assertEquals(bus.isAvailable(CommandB), true);
+  });
+
+  await t.step("getAvailableCommands should return current available list", () => {
+    const bus = new CommandBus();
+    assertEquals(bus.getAvailableCommands(), []);
+
+    bus.register(CommandA, (cmd) => cmd.data);
+    assertEquals(bus.getAvailableCommands(), ["CommandA"]);
+
+    bus.registerStream(CommandB, (cmd, _ctx, next) => {
+      next(cmd.data, true);
+    });
+    assertEquals(new Set(bus.getAvailableCommands()), new Set(["CommandA", "CommandB"]));
+
+    bus.unregister(CommandA);
+    assertEquals(bus.getAvailableCommands(), ["CommandB"]);
+  });
+
+  await t.step("onAvailabilityChange should invoke callback with immediate state and transitions", () => {
+    const bus = new CommandBus();
+    const transitions: { isAvailable: boolean; name: string }[] = [];
+
+    const unsubscribe = bus.onAvailabilityChange(CommandA, (isAvailable, name) => {
+      transitions.push({ isAvailable, name });
+    }, { immediate: true });
+
+    assertEquals(transitions, [{ isAvailable: false, name: "CommandA" }]);
+
+    bus.register(CommandA, (cmd) => cmd.data);
+    assertEquals(transitions, [
+      { isAvailable: false, name: "CommandA" },
+      { isAvailable: true, name: "CommandA" },
+    ]);
+
+    bus.unregister(CommandA);
+    assertEquals(transitions, [
+      { isAvailable: false, name: "CommandA" },
+      { isAvailable: true, name: "CommandA" },
+      { isAvailable: false, name: "CommandA" },
+    ]);
+
+    unsubscribe();
+    bus.register(CommandA, (cmd) => cmd.data);
+    // No more notifications after unsubscribe
+    assertEquals(transitions.length, 3);
+  });
+
+  await t.step("onAvailabilityChange should support immediate: false", () => {
+    const bus = new CommandBus();
+    const transitions: boolean[] = [];
+
+    bus.onAvailabilityChange(CommandA, (isAvailable) => {
+      transitions.push(isAvailable);
+    }, { immediate: false });
+
+    assertEquals(transitions.length, 0);
+
+    bus.register(CommandA, (cmd) => cmd.data);
+    assertEquals(transitions, [true]);
+  });
+
+  await t.step("onAvailabilityChange should support array of commands", () => {
+    const bus = new CommandBus();
+    const states: boolean[] = [];
+
+    bus.onAvailabilityChange([CommandA, CommandB], (isAvailable) => {
+      states.push(isAvailable);
+    }, { immediate: true });
+
+    assertEquals(states, [false]);
+
+    bus.register(CommandA, (cmd) => cmd.data);
+    assertEquals(states, [false, false]); // CommandB still missing
+
+    bus.register(CommandB, (cmd) => cmd.data);
+    assertEquals(states, [false, false, true]); // Both now available
+  });
+
+  await t.step("waitFor should resolve immediately if already available", async () => {
+    const bus = new CommandBus();
+    bus.register(CommandA, (cmd) => cmd.data);
+
+    let resolved = false;
+    await bus.waitFor(CommandA).then(() => {
+      resolved = true;
+    });
+    assertEquals(resolved, true);
+  });
+
+  await t.step("waitFor should wait and resolve when command becomes available", async () => {
+    const bus = new CommandBus();
+    let resolved = false;
+
+    const promise = bus.waitFor(CommandA).then(() => {
+      resolved = true;
+    });
+
+    assertEquals(resolved, false);
+    await sleep(20);
+    assertEquals(resolved, false);
+
+    bus.register(CommandA, (cmd) => cmd.data);
+    await promise;
+    assertEquals(resolved, true);
+  });
+
+  await t.step("waitFor should reject on timeout", async () => {
+    const bus = new CommandBus();
+    await assertRejects(
+      () => bus.waitFor(CommandA, { timeout: 50 }),
+      Error,
+      "Timeout waiting for command(s): CommandA",
+    );
+  });
+
+  await t.step("waitFor should reject on AbortSignal", async () => {
+    const bus = new CommandBus();
+    const ac = new AbortController();
+
+    const promise = bus.waitFor(CommandA, { signal: ac.signal });
+    ac.abort(new Error("Custom abort"));
+
+    await assertRejects(() => promise, Error, "Custom abort");
+  });
+
+  await t.step("waitFor should handle array of commands", async () => {
+    const bus = new CommandBus();
+    let resolved = false;
+
+    const promise = bus.waitFor([CommandA, CommandB]).then(() => {
+      resolved = true;
+    });
+
+    bus.register(CommandA, (cmd) => cmd.data);
+    await sleep(20);
+    assertEquals(resolved, false);
+
+    bus.register(CommandB, (cmd) => cmd.data);
+    await promise;
+    assertEquals(resolved, true);
+  });
+});
+

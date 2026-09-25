@@ -31,6 +31,7 @@ export class AsyncCommandBus<
     if (this.plugin?.register) {
       this.plugin.register(command);
     }
+    this.notifyAvailabilityChange(command.name, true);
   }
 
   async execute<C extends Command>(
@@ -66,6 +67,7 @@ export class AsyncCommandBus<
     if (this.plugin?.registerStream) {
       this.plugin.registerStream(command);
     }
+    this.notifyAvailabilityChange(command.name, true);
   }
 
   async *streamAsync<C extends Command>(

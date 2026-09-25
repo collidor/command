@@ -14,12 +14,27 @@ export type StreamPluginHandler<
   abortSignal?: AbortSignal,
 ) => (() => void) | Promise<() => void>;
 
+export type AvailabilityChangeOptions = {
+  immediate?: boolean;
+};
+
+export type WaitForOptions = {
+  timeout?: number;
+  signal?: AbortSignal;
+};
+
 // --- Plugin Base Definition ---
 export interface BasePlugin<TContext extends ContextType> {
   install?: (commandBus: any, context: TContext) => void;
   register?: (Command: Type<Command>) => void;
   registerStream?: (Command: Type<Command>) => void;
+  unregister?: (Command: Type<Command> | string) => void;
   streamHandler?: StreamPluginHandler<any, TContext>;
+  isAvailable?: (commandName: string) => boolean;
+  getAvailableCommands?: () => string[];
+  onAvailabilityChange?: (
+    callback: (commandName: string, isAvailable: boolean) => void,
+  ) => () => void;
 }
 
 // --- Sync Specific Types ---

@@ -373,3 +373,97 @@ Deno.test("PortChannelPlugin - fails over to next candidate when first candidate
   assert(duration < 1000, `Expected duration < 1000ms, got ${duration}ms`);
 });
 
+Deno.test("PortChannelPlugin - remote command availability via register and unregister", () => {
+  const nodes = getNodes(2);
+
+  assertEquals(nodes[0].commandBus.isAvailable(ExampleCommand), false);
+  assertEquals(nodes[0].commandBus.getAvailableCommands(), []);
+
+  const transitions: boolean[] = [];
+  nodes[0].commandBus.onAvailabilityChange(ExampleCommand, (avail) => {
+    transitions.push(avail);
+  }, { immediate: true });
+
+  assertEquals(transitions, [false]);
+
+  // Node 1 registers the command
+  nodes[1].commandBus.register(ExampleCommand, (cmd) => cmd.data * 2);
+
+  assertEquals(nodes[0].commandBus.isAvailable(ExampleCommand), true);
+  assertEquals(nodes[0].commandBus.getAvailableCommands(), ["ExampleCommand"]);
+  assertEquals(transitions, [false, true]);
+
+  // Node 1 unregisters the command
+  nodes[1].commandBus.unregister(ExampleCommand);
+
+  assertEquals(nodes[0].commandBus.isAvailable(ExampleCommand), false);
+  assertEquals(nodes[0].commandBus.getAvailableCommands(), []);
+  assertEquals(transitions, [false, true, false]);
+});
+
+Deno.test("PortChannelPlugin - remote command availability on peer disconnect", () => {
+  const nodes = getNodes(2);
+
+  nodes[1].commandBus.register(ExampleCommand, (cmd) => cmd.data * 2);
+  assertEquals(nodes[0].commandBus.isAvailable(ExampleCommand), true);
+
+  const transitions: boolean[] = [];
+  nodes[0].commandBus.onAvailabilityChange(ExampleCommand, (avail) => {
+    transitions.push(avail);
+  }, { immediate: false });
+
+  // Simulate peer 1 disconnect on peer 0
+  nodes[0].portChannelPlugin.removePort(nodes[0].port, nodes[1].portChannelPlugin.id);
+
+  assertEquals(nodes[0].commandBus.isAvailable(ExampleCommand), false);
+  assertEquals(transitions, [false]);
+});
+
+Deno.test("PortChannelPlugin - multi-peer redundancy preserves availability until last peer leaves", () => {
+  const nodes = getNodes(3);
+
+  // Both Node 1 and Node 2 register ExampleCommand
+  nodes[1].commandBus.register(ExampleCommand, (cmd) => cmd.data * 2);
+  nodes[2].commandBus.register(ExampleCommand, (cmd) => cmd.data * 3);
+
+  assertEquals(nodes[0].commandBus.isAvailable(ExampleCommand), true);
+
+  const transitions: boolean[] = [];
+  nodes[0].commandBus.onAvailabilityChange(ExampleCommand, (avail) => {
+    transitions.push(avail);
+  }, { immediate: false });
+
+  // Node 1 disconnects - Node 2 is still providing ExampleCommand
+  nodes[0].portChannelPlugin.removePort(nodes[0].port, nodes[1].portChannelPlugin.id);
+  assertEquals(nodes[0].commandBus.isAvailable(ExampleCommand), true);
+  assertEquals(transitions.length, 0); // No false drop!
+
+  // Node 2 unregisters ExampleCommand
+  nodes[2].commandBus.unregister(ExampleCommand);
+  assertEquals(nodes[0].commandBus.isAvailable(ExampleCommand), false);
+  assertEquals(transitions, [false]);
+});
+
+Deno.test("PortChannelPlugin - waitFor remote command across peers", async () => {
+  const nodes = getNodes(2);
+  let resolved = false;
+
+  const waitPromise = nodes[0].commandBus.waitFor(ExampleCommand).then(() => {
+    resolved = true;
+  });
+
+  assertEquals(resolved, false);
+  await sleep(10);
+  assertEquals(resolved, false);
+
+  // Node 1 registers ExampleCommand
+  nodes[1].commandBus.register(ExampleCommand, (cmd) => cmd.data * 5);
+  await waitPromise;
+  assertEquals(resolved, true);
+
+  // Node 0 can now execute it
+  const result = await nodes[0].commandBus.execute(new ExampleCommand(7));
+  assertEquals(result, 35);
+});
+
+

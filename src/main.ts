@@ -13,12 +13,14 @@ export {
 export type {
   AsyncCommandBusPlugin,
   AsyncPluginHandler,
+  AvailabilityChangeOptions,
   BasePlugin,
   CommandBusOptions,
   CommandBusPlugin,
   PluginHandler,
   StreamPluginHandler,
   Type,
+  WaitForOptions,
 } from "./commandBusTypes.ts";
 
 export { BaseCommandBus } from "./baseCommandBus.ts";

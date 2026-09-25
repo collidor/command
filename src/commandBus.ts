@@ -20,6 +20,7 @@ export class CommandBus<
     if (this.plugin?.register) {
       this.plugin.register(command);
     }
+    this.notifyAvailabilityChange(command.name, true);
   }
 
   execute<C extends Command>(

@@ -116,3 +116,41 @@ Deno.test("AsyncCommandBus - Plugins", async (t) => {
     assertEquals(result, 150); // 50 (cmd) + 100 (plugin)
   });
 });
+
+Deno.test("AsyncCommandBus - Availability & Readiness", async (t) => {
+  class AsyncGenCommand extends Command<number, number> {}
+
+  await t.step("isAvailable should work with registerStreamAsync and unregister", () => {
+    const bus = new AsyncCommandBus();
+    assertEquals(bus.isAvailable(AsyncGenCommand), false);
+
+    bus.registerStreamAsync(AsyncGenCommand, async function* (cmd) {
+      yield cmd.data;
+    });
+
+    assertEquals(bus.isAvailable(AsyncGenCommand), true);
+    assertEquals(bus.getAvailableCommands(), ["AsyncGenCommand"]);
+
+    const removed = bus.unregister(AsyncGenCommand);
+    assertEquals(removed, true);
+    assertEquals(bus.isAvailable(AsyncGenCommand), false);
+    assertEquals(bus.getAvailableCommands(), []);
+  });
+
+  await t.step("waitFor should work with registerStreamAsync", async () => {
+    const bus = new AsyncCommandBus();
+    let resolved = false;
+
+    const promise = bus.waitFor(AsyncGenCommand).then(() => {
+      resolved = true;
+    });
+
+    bus.registerStreamAsync(AsyncGenCommand, async function* (cmd) {
+      yield cmd.data;
+    });
+
+    await promise;
+    assertEquals(resolved, true);
+  });
+});
+
