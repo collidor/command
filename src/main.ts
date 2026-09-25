@@ -13,6 +13,7 @@ export {
 export type {
   AsyncCommandBusPlugin,
   AsyncPluginHandler,
+  AvailabilityCallback,
   AvailabilityChangeOptions,
   BasePlugin,
   CommandBusOptions,

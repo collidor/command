@@ -17,6 +17,54 @@ export class AsyncCommandBus<
     ) => AsyncIterableIterator<any>
   > = new Map();
 
+  protected override isSubclassCommandAvailable(commandName: string): boolean {
+    return this.asyncStreamHandlers.has(commandName);
+  }
+
+  protected override collectSubclassAvailableCommands(
+    commands: Set<string>,
+  ): void {
+    for (const name of this.asyncStreamHandlers.keys()) {
+      commands.add(name);
+    }
+  }
+
+  protected override unregisterSubclassCommand(commandName: string): boolean {
+    return this.asyncStreamHandlers.delete(commandName);
+  }
+
+  protected override executeSubclassStream(
+    command: Command,
+    callback: (data: any, done: boolean, error?: any) => void,
+    context: TContext,
+    abortSignal?: AbortSignal,
+  ): (() => void) | undefined {
+    const handler = this.asyncStreamHandlers.get(command.constructor.name);
+    if (!handler) return undefined;
+
+    let unsubscribed = false;
+    (async () => {
+      try {
+        for await (const data of handler(command, context)) {
+          if (unsubscribed) break;
+          callback(data, false);
+        }
+        if (!unsubscribed) callback(null, true);
+      } catch (error) {
+        if (!unsubscribed) callback(null, true, error);
+      }
+    })();
+
+    if (abortSignal) {
+      abortSignal.addEventListener("abort", () => {
+        unsubscribed = true;
+      });
+    }
+    return () => {
+      unsubscribed = true;
+    };
+  }
+
   register(
     command: Type<Command> | Type<Command>[],
   ): void;
@@ -71,6 +119,9 @@ export class AsyncCommandBus<
     return await handler(command, ctx);
   }
 
+  registerStreamAsync(
+    command: Type<Command> | Type<Command>[],
+  ): void;
   registerStreamAsync<C extends Command>(
     command: Type<C>,
     handler: (
@@ -78,14 +129,29 @@ export class AsyncCommandBus<
       context: TContext,
       meta?: Record<string, any>,
     ) => AsyncIterable<C[COMMAND_RETURN]>,
-  ) {
-    this.commandConstructor.set(command.name, command);
-    this.asyncStreamHandlers.set(command.name, handler as any);
+  ): void;
+  registerStreamAsync<C extends Command>(
+    command: Type<C> | Type<Command>[],
+    handler?: (
+      command: C,
+      context: TContext,
+      meta?: Record<string, any>,
+    ) => AsyncIterable<C[COMMAND_RETURN]>,
+  ): void {
+    const commands = Array.isArray(command) ? command : [command];
+    for (const cmd of commands) {
+      this.commandConstructor.set(cmd.name, cmd);
+      if (handler) {
+        this.asyncStreamHandlers.set(cmd.name, handler as any);
+      } else {
+        this.providedCommands.add(cmd.name);
+      }
 
-    if (this.plugin?.registerStream) {
-      this.plugin.registerStream(command);
+      if (this.plugin?.registerStream) {
+        this.plugin.registerStream(cmd);
+      }
+      this.notifyAvailabilityChange(cmd.name, true);
     }
-    this.notifyAvailabilityChange(command.name, true);
   }
 
   async *streamAsync<C extends Command>(

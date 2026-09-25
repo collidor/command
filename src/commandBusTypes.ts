@@ -18,6 +18,11 @@ export type AvailabilityChangeOptions = {
   immediate?: boolean;
 };
 
+export type AvailabilityCallback = (
+  isAvailable: boolean,
+  command: string | string[],
+) => void;
+
 export type WaitForOptions = {
   timeout?: number;
   signal?: AbortSignal;

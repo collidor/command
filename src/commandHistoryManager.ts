@@ -297,8 +297,9 @@ export class CommandHistoryManager<
       try {
         l();
       } catch (e) {
-        // deno-lint-ignore no-console
-        console.error("Error in CommandHistoryManager listener:", e);
+        if (typeof reportError === "function") {
+          reportError(e);
+        }
       }
     });
   }

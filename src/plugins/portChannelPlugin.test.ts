@@ -553,4 +553,37 @@ Deno.test(
   },
 );
 
+Deno.test(
+  "PortChannelPlugin - execute remote stream resolved via DI provider on worker node",
+  async () => {
+    const nodes = getNodes(2);
+
+    class ExampleStreamHandler {
+      async *streamAsync(cmd: ExampleCommand) {
+        for (let i = 0; i < cmd.data; i++) {
+          yield i * 5;
+        }
+      }
+    }
+
+    nodes[1].commandBus.setProvider((cmdType) => {
+      if (cmdType === ExampleCommand) {
+        return new ExampleStreamHandler();
+      }
+    });
+    nodes[1].commandBus.registerStream(ExampleCommand);
+
+    const results: number[] = [];
+    await new Promise<void>((resolve, reject) => {
+      nodes[0].commandBus.stream(new ExampleCommand(3), (data, done, err) => {
+        if (err) return reject(err);
+        if (!done) results.push(data);
+        if (done) resolve();
+      });
+    });
+
+    assertEquals(results, [0, 5, 10]);
+  },
+);
+
 

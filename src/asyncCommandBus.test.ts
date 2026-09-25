@@ -230,5 +230,31 @@ Deno.test("AsyncCommandBus - DI Provider & Single-Point Registration", async (t)
       assertEquals(available, true);
     },
   );
+
+  await t.step(
+    "registerStreamAsync should support single-point registration without handler",
+    async () => {
+      const bus = new AsyncCommandBus({
+        provider: (cmdType) => {
+          if (cmdType === AsyncStreamCommand) {
+            return {
+              async *streamAsync(cmd: AsyncStreamCommand) {
+                yield cmd.data * 10;
+              },
+            };
+          }
+        },
+      });
+
+      bus.registerStreamAsync(AsyncStreamCommand);
+      assertEquals(bus.isAvailable(AsyncStreamCommand), true);
+
+      const items: number[] = [];
+      for await (const val of bus.streamAsync(new AsyncStreamCommand(4))) {
+        items.push(val);
+      }
+      assertEquals(items, [40]);
+    },
+  );
 });
 

@@ -505,5 +505,94 @@ Deno.test("CommandBus (Sync) - DI Provider & Single-Point Registration", async (
       assertEquals(done, true);
     },
   );
+
+  await t.step(
+    "stream should delegate to provider instance streamAsync() generator when stream() is absent",
+    async () => {
+      class AsyncGenHandler {
+        async *streamAsync(cmd: StreamCommand) {
+          for (let i = 0; i < cmd.data; i++) {
+            yield i * 3;
+          }
+        }
+      }
+
+      const bus = new CommandBus({
+        provider: (cmdType) =>
+          cmdType === StreamCommand ? new AsyncGenHandler() : undefined,
+      });
+      bus.register(StreamCommand);
+
+      const results: number[] = [];
+      await new Promise<void>((resolve, reject) => {
+        bus.stream(new StreamCommand(3), (val, done, err) => {
+          if (err) return reject(err);
+          if (!done) results.push(val);
+          if (done) resolve();
+        });
+      });
+      assertEquals(results, [0, 3, 6]);
+    },
+  );
+
+  await t.step(
+    "waitFor should remove abort listener from signal on resolution to prevent leaks",
+    async () => {
+      const bus = new CommandBus();
+      const ac = new AbortController();
+
+      let listenersCount = 0;
+      const originalAdd = ac.signal.addEventListener.bind(ac.signal);
+      const originalRemove = ac.signal.removeEventListener.bind(ac.signal);
+
+      ac.signal.addEventListener = ((type: string, listener: any, options: any) => {
+        if (type === "abort") listenersCount++;
+        return originalAdd(type, listener, options);
+      }) as any;
+
+      ac.signal.removeEventListener = ((type: string, listener: any, options: any) => {
+        if (type === "abort") listenersCount--;
+        return originalRemove(type, listener, options);
+      }) as any;
+
+      const promise = bus.waitFor(StreamCommand, { signal: ac.signal });
+      assertEquals(listenersCount, 1);
+
+      bus.register(StreamCommand, () => 42);
+      await promise;
+
+      assertEquals(listenersCount, 0);
+    },
+  );
+
+  await t.step(
+    "registerStream should support single-point registration without handler",
+    () => {
+      const bus = new CommandBus({
+        provider: (cmdType) => {
+          if (cmdType === StreamCommand) {
+            return {
+              stream: (
+                cmd: StreamCommand,
+                _ctx: any,
+                next: (v: number, d: boolean) => void,
+              ) => {
+                next(cmd.data * 2, true);
+              },
+            };
+          }
+        },
+      });
+
+      bus.registerStream(StreamCommand);
+      assertEquals(bus.isAvailable(StreamCommand), true);
+
+      let result = 0;
+      bus.stream(new StreamCommand(15), (v) => {
+        result = v;
+      });
+      assertEquals(result, 30);
+    },
+  );
 });
 

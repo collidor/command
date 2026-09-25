@@ -1,5 +1,6 @@
 import type { Command, COMMAND_RETURN } from "./commandModel.ts";
 import type {
+  AvailabilityCallback,
   AvailabilityChangeOptions,
   BasePlugin,
   CommandBusOptions,
@@ -33,6 +34,27 @@ export abstract class BaseCommandBus<
   public context: TContext;
   protected plugin?: TPlugin;
   protected provider?: CommandHandlerProvider<TContext>;
+
+  protected isSubclassCommandAvailable(_commandName: string): boolean {
+    return false;
+  }
+
+  protected collectSubclassAvailableCommands(_commands: Set<string>): void {
+    // Overridden by subclasses (e.g. AsyncCommandBus)
+  }
+
+  protected unregisterSubclassCommand(_commandName: string): boolean {
+    return false;
+  }
+
+  protected executeSubclassStream(
+    _command: Command,
+    _callback: (data: any, done: boolean, error?: any) => void,
+    _context: TContext,
+    _abortSignal?: AbortSignal,
+  ): (() => void) | undefined {
+    return undefined;
+  }
 
   protected availabilityListeners: Map<
     string,
@@ -95,6 +117,133 @@ export abstract class BaseCommandBus<
     return undefined;
   }
 
+  public hasLocalStreamHandler(commandName: string): boolean {
+    return (
+      this.streamHandlers.has(commandName) ||
+      this.isSubclassCommandAvailable(commandName) ||
+      this.providedCommands.has(commandName)
+    );
+  }
+
+  public executeLocalStream<C extends Command>(
+    command: C,
+    callback: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
+    context?: TContext,
+    abortSignal?: AbortSignal,
+  ): () => void {
+    const name = command.constructor.name;
+    const ctx = context ?? this.context;
+
+    // 1. Check Registered Callback Handler
+    const handler = this.streamHandlers.get(name);
+    if (handler) {
+      let unsubscribed = false;
+      const unsubscribe = handler(
+        command,
+        ctx,
+        (data, done, error) => {
+          if (unsubscribed) return;
+          callback(data, done, error);
+          if (done) unsubscribed = true;
+        },
+      );
+      return this.setupAbort(unsubscribe, abortSignal, () => {
+        unsubscribed = true;
+      });
+    }
+
+    // 2. Check Subclass Stream Handler (e.g. asyncStreamHandlers in AsyncCommandBus)
+    const subclassStream = this.executeSubclassStream(
+      command,
+      callback,
+      ctx,
+      abortSignal,
+    );
+    if (subclassStream) {
+      return this.setupAbort(subclassStream, abortSignal);
+    }
+
+    // 3. Check Provider (Streaming support on provided classes)
+    if (this.providedCommands.has(name) && this.provider) {
+      const constructor = this.commandConstructor.get(name);
+      if (constructor) {
+        const resolved = this.provider(constructor, ctx);
+        if (resolved) {
+          if (typeof (resolved as any).stream === "function") {
+            let unsubscribed = false;
+            const unsubscribe = (resolved as any).stream(
+              command,
+              ctx,
+              (data: any, done: boolean, error?: any) => {
+                if (unsubscribed) return;
+                callback(data, done, error);
+                if (done) unsubscribed = true;
+              },
+            );
+            return this.setupAbort(unsubscribe, abortSignal, () => {
+              unsubscribed = true;
+            });
+          }
+
+          if (typeof (resolved as any).streamAsync === "function") {
+            let unsubscribed = false;
+            (async () => {
+              try {
+                for await (
+                  const data of (resolved as any).streamAsync(command, ctx)
+                ) {
+                  if (unsubscribed) break;
+                  callback(data, false);
+                }
+                if (!unsubscribed) callback(null as any, true);
+              } catch (error) {
+                if (!unsubscribed) callback(null as any, true, error);
+              }
+            })();
+            return this.setupAbort(() => {
+              unsubscribed = true;
+            }, abortSignal, () => {
+              unsubscribed = true;
+            });
+          }
+
+          const executeFn = typeof (resolved as any).execute === "function"
+            ? (resolved as any).execute.bind(resolved)
+            : typeof resolved === "function"
+            ? resolved
+            : undefined;
+
+          if (executeFn) {
+            let unsubscribed = false;
+            try {
+              const res = executeFn(command, ctx);
+              if (res instanceof Promise) {
+                res
+                  .then((result) => {
+                    if (!unsubscribed) callback(result, true);
+                  })
+                  .catch((err) => {
+                    if (!unsubscribed) callback(null as any, true, err);
+                  });
+              } else {
+                callback(res, true);
+              }
+            } catch (err) {
+              callback(null as any, true, err);
+            }
+            return this.setupAbort(() => {
+              unsubscribed = true;
+            }, abortSignal, () => {
+              unsubscribed = true;
+            });
+          }
+        }
+      }
+    }
+
+    throw new Error(`No local stream handler found for ${name}`);
+  }
+
   /**
    * Shared Stream implementation (Callback based)
    */
@@ -115,95 +264,13 @@ export abstract class BaseCommandBus<
       return this.setupAbort(unsubscribe, abortSignal);
     }
 
-    // 2. Check Registered Handler
-    const handler = this.streamHandlers.get(command.constructor.name);
-    if (handler) {
-      let unsubscribed = false;
-      const unsubscribe = handler(
-        command,
-        context ?? this.context,
-        (data, done, error) => {
-          if (unsubscribed) return;
-          callback(data, done, error);
-          if (done) unsubscribed = true;
-        },
-      );
-
-      return this.setupAbort(unsubscribe, abortSignal, () => {
-        unsubscribed = true;
-      });
-    }
-
-    // 3. Check Provider (Streaming support on provided classes)
-    if (
-      this.providedCommands.has(command.constructor.name) &&
-      this.provider
-    ) {
-      const constructor = this.commandConstructor.get(
-        command.constructor.name,
-      );
-      if (constructor) {
-        const resolved = this.provider(constructor, context ?? this.context);
-        if (resolved) {
-          if (typeof (resolved as any).stream === "function") {
-            let unsubscribed = false;
-            const unsubscribe = (resolved as any).stream(
-              command,
-              context ?? this.context,
-              (data: any, done: boolean, error?: any) => {
-                if (unsubscribed) return;
-                callback(data, done, error);
-                if (done) unsubscribed = true;
-              },
-            );
-            return this.setupAbort(unsubscribe, abortSignal, () => {
-              unsubscribed = true;
-            });
-          }
-
-          const executeFn = typeof (resolved as any).execute === "function"
-            ? (resolved as any).execute.bind(resolved)
-            : typeof resolved === "function"
-            ? resolved
-            : undefined;
-
-          if (executeFn) {
-            let unsubscribed = false;
-            try {
-              const res = executeFn(command, context ?? this.context);
-              if (res instanceof Promise) {
-                res
-                  .then((result) => {
-                    if (!unsubscribed) {
-                      callback(result, true);
-                    }
-                  })
-                  .catch((err) => {
-                    if (!unsubscribed) {
-                      callback(null as any, true, err);
-                    }
-                  });
-              } else {
-                callback(res, true);
-              }
-            } catch (err) {
-              callback(null as any, true, err);
-            }
-            return this.setupAbort(() => {
-              unsubscribed = true;
-            }, abortSignal, () => {
-              unsubscribed = true;
-            });
-          }
-        }
-      }
-    }
-
-    throw new Error(
-      `No stream plugin registered for ${command.constructor.name}`,
-    );
+    // 2. Local Stream Execution
+    return this.executeLocalStream(command, callback, context, abortSignal);
   }
 
+  registerStream(
+    command: Type<Command> | Type<Command>[],
+  ): void;
   registerStream<C extends Command>(
     command: Type<C>,
     handler: (
@@ -212,14 +279,30 @@ export abstract class BaseCommandBus<
       next: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
       meta?: Record<string, any>,
     ) => (() => void) | Promise<() => void> | void,
-  ) {
-    this.commandConstructor.set(command.name, command);
-    this.streamHandlers.set(command.name, handler as any);
+  ): void;
+  registerStream<C extends Command>(
+    command: Type<C> | Type<Command>[],
+    handler?: (
+      command: C,
+      context: TContext,
+      next: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
+      meta?: Record<string, any>,
+    ) => (() => void) | Promise<() => void> | void,
+  ): void {
+    const commands = Array.isArray(command) ? command : [command];
+    for (const cmd of commands) {
+      this.commandConstructor.set(cmd.name, cmd);
+      if (handler) {
+        this.streamHandlers.set(cmd.name, handler as any);
+      } else {
+        this.providedCommands.add(cmd.name);
+      }
 
-    if (this.plugin?.registerStream) {
-      this.plugin.registerStream(command);
+      if (this.plugin?.registerStream) {
+        this.plugin.registerStream(cmd);
+      }
+      this.notifyAvailabilityChange(cmd.name, true);
     }
-    this.notifyAvailabilityChange(command.name, true);
   }
 
   public getCommandName(
@@ -249,10 +332,7 @@ export abstract class BaseCommandBus<
     const name = this.getCommandName(command);
     if (this.handlers.has(name)) return true;
     if (this.streamHandlers.has(name)) return true;
-    const asyncHandlers = (this as any).asyncStreamHandlers;
-    if (asyncHandlers && typeof asyncHandlers.has === "function") {
-      if (asyncHandlers.has(name)) return true;
-    }
+    if (this.isSubclassCommandAvailable(name)) return true;
     if (this.providedCommands.has(name)) return true;
     if (this.plugin?.isAvailable) {
       return this.plugin.isAvailable(name);
@@ -268,12 +348,7 @@ export abstract class BaseCommandBus<
     for (const name of this.streamHandlers.keys()) {
       commands.add(name);
     }
-    const asyncHandlers = (this as any).asyncStreamHandlers;
-    if (asyncHandlers && typeof asyncHandlers.keys === "function") {
-      for (const name of asyncHandlers.keys()) {
-        commands.add(name);
-      }
-    }
+    this.collectSubclassAvailableCommands(commands);
     for (const name of this.providedCommands) {
       commands.add(name);
     }
@@ -303,23 +378,43 @@ export abstract class BaseCommandBus<
   }
 
   public onAvailabilityChange(
+    command: (Type<Command> | Command | string)[],
+    callback: (isAvailable: boolean, commands: string[]) => void,
+    options?: AvailabilityChangeOptions,
+  ): () => void;
+  public onAvailabilityChange(
+    command: Type<Command> | Command | string,
+    callback: (isAvailable: boolean, commandName: string) => void,
+    options?: AvailabilityChangeOptions,
+  ): () => void;
+  public onAvailabilityChange(
     command:
       | Type<Command>
       | Command
       | string
       | (Type<Command> | Command | string)[],
-    callback: (isAvailable: boolean, commandName: string) => void,
+    callback: (isAvailable: boolean, command: any) => void,
+    options?: AvailabilityChangeOptions,
+  ): () => void;
+  public onAvailabilityChange(
+    command:
+      | Type<Command>
+      | Command
+      | string
+      | (Type<Command> | Command | string)[],
+    callback: (isAvailable: boolean, command: any) => void,
     options?: AvailabilityChangeOptions,
   ): () => void {
     const immediate = options?.immediate ?? true;
 
     if (Array.isArray(command)) {
+      const names = command.map((c) => this.getCommandName(c));
+
       const unsubscribes = command.map((cmd) =>
         this.onAvailabilityChange(
           cmd,
           () => {
             const available = this.isAvailable(command);
-            const names = command.map((c) => this.getCommandName(c)).join(",");
             callback(available, names);
           },
           { immediate: false },
@@ -328,7 +423,6 @@ export abstract class BaseCommandBus<
 
       if (immediate) {
         const available = this.isAvailable(command);
-        const names = command.map((c) => this.getCommandName(c)).join(",");
         callback(available, names);
       }
 
@@ -382,6 +476,7 @@ export abstract class BaseCommandBus<
     const { promise, resolve, reject } = Promise.withResolvers<void>();
     let timer: any;
     let unsubscribe: (() => void) | undefined;
+    let onAbort: (() => void) | undefined;
 
     const cleanup = () => {
       if (timer !== undefined) {
@@ -392,17 +487,18 @@ export abstract class BaseCommandBus<
         unsubscribe();
         unsubscribe = undefined;
       }
+      if (options?.signal && onAbort) {
+        options.signal.removeEventListener("abort", onAbort);
+        onAbort = undefined;
+      }
     };
 
     if (options?.signal) {
-      options.signal.addEventListener(
-        "abort",
-        () => {
-          cleanup();
-          reject(options.signal?.reason ?? new Error("Aborted"));
-        },
-        { once: true },
-      );
+      onAbort = () => {
+        cleanup();
+        reject(options.signal?.reason ?? new Error("Aborted"));
+      };
+      options.signal.addEventListener("abort", onAbort, { once: true });
     }
 
     if (options?.timeout !== undefined && options.timeout > 0) {
@@ -441,12 +537,8 @@ export abstract class BaseCommandBus<
       this.streamHandlers.delete(name);
       removed = true;
     }
-    const asyncHandlers = (this as any).asyncStreamHandlers;
-    if (asyncHandlers && typeof asyncHandlers.delete === "function") {
-      if (asyncHandlers.has(name)) {
-        asyncHandlers.delete(name);
-        removed = true;
-      }
+    if (this.unregisterSubclassCommand(name)) {
+      removed = true;
     }
     if (this.providedCommands.has(name)) {
       this.providedCommands.delete(name);
