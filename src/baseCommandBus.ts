@@ -3,6 +3,7 @@ import type {
   AvailabilityChangeOptions,
   BasePlugin,
   CommandBusOptions,
+  CommandHandlerProvider,
   Type,
   WaitForOptions,
 } from "./commandBusTypes.ts";
@@ -28,8 +29,10 @@ export abstract class BaseCommandBus<
   > = new Map();
 
   public commandConstructor: Map<string, Type<Command>> = new Map();
+  public providedCommands: Set<string> = new Set();
   public context: TContext;
   protected plugin?: TPlugin;
+  protected provider?: CommandHandlerProvider<TContext>;
 
   protected availabilityListeners: Map<
     string,
@@ -41,6 +44,7 @@ export abstract class BaseCommandBus<
   constructor(options?: CommandBusOptions<TContext, TPlugin>) {
     this.context = options?.context || ({} as TContext);
     this.plugin = options?.plugin;
+    this.provider = options?.provider;
 
     if (this.plugin?.install) {
       this.plugin.install(this, this.context);
@@ -52,6 +56,43 @@ export abstract class BaseCommandBus<
         this.notifyAvailabilityChange(commandName, available);
       });
     }
+  }
+
+  public setProvider(provider?: CommandHandlerProvider<TContext>): void {
+    this.provider = provider;
+  }
+
+  public getProvider(): CommandHandlerProvider<TContext> | undefined {
+    return this.provider;
+  }
+
+  public getHandler<C extends Command>(
+    commandName: string,
+  ): ((command: C, context?: TContext, meta?: Record<string, any>) => any) | undefined {
+    if (this.handlers.has(commandName)) {
+      return this.handlers.get(commandName);
+    }
+    if (this.providedCommands.has(commandName) && this.provider) {
+      const constructor = this.commandConstructor.get(commandName);
+      if (constructor) {
+        return (cmd: C, ctx?: TContext, meta?: Record<string, any>) => {
+          const resolved = this.provider!(constructor, ctx ?? this.context);
+          if (!resolved) {
+            throw new Error(`Provider returned no handler for ${commandName}`);
+          }
+          if (typeof (resolved as any).execute === "function") {
+            return (resolved as any).execute(cmd, ctx ?? this.context, meta);
+          }
+          if (typeof resolved === "function") {
+            return (resolved as any)(cmd, ctx ?? this.context, meta);
+          }
+          throw new Error(
+            `Provider did not return a valid handler or execute method for ${commandName}`,
+          );
+        };
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -76,26 +117,91 @@ export abstract class BaseCommandBus<
 
     // 2. Check Registered Handler
     const handler = this.streamHandlers.get(command.constructor.name);
-    if (!handler) {
-      throw new Error(
-        `No stream plugin registered for ${command.constructor.name}`,
+    if (handler) {
+      let unsubscribed = false;
+      const unsubscribe = handler(
+        command,
+        context ?? this.context,
+        (data, done, error) => {
+          if (unsubscribed) return;
+          callback(data, done, error);
+          if (done) unsubscribed = true;
+        },
       );
+
+      return this.setupAbort(unsubscribe, abortSignal, () => {
+        unsubscribed = true;
+      });
     }
 
-    let unsubscribed = false;
-    const unsubscribe = handler(
-      command,
-      context ?? this.context,
-      (data, done, error) => {
-        if (unsubscribed) return;
-        callback(data, done, error);
-        if (done) unsubscribed = true;
-      },
-    );
+    // 3. Check Provider (Streaming support on provided classes)
+    if (
+      this.providedCommands.has(command.constructor.name) &&
+      this.provider
+    ) {
+      const constructor = this.commandConstructor.get(
+        command.constructor.name,
+      );
+      if (constructor) {
+        const resolved = this.provider(constructor, context ?? this.context);
+        if (resolved) {
+          if (typeof (resolved as any).stream === "function") {
+            let unsubscribed = false;
+            const unsubscribe = (resolved as any).stream(
+              command,
+              context ?? this.context,
+              (data: any, done: boolean, error?: any) => {
+                if (unsubscribed) return;
+                callback(data, done, error);
+                if (done) unsubscribed = true;
+              },
+            );
+            return this.setupAbort(unsubscribe, abortSignal, () => {
+              unsubscribed = true;
+            });
+          }
 
-    return this.setupAbort(unsubscribe, abortSignal, () => {
-      unsubscribed = true;
-    });
+          const executeFn = typeof (resolved as any).execute === "function"
+            ? (resolved as any).execute.bind(resolved)
+            : typeof resolved === "function"
+            ? resolved
+            : undefined;
+
+          if (executeFn) {
+            let unsubscribed = false;
+            try {
+              const res = executeFn(command, context ?? this.context);
+              if (res instanceof Promise) {
+                res
+                  .then((result) => {
+                    if (!unsubscribed) {
+                      callback(result, true);
+                    }
+                  })
+                  .catch((err) => {
+                    if (!unsubscribed) {
+                      callback(null as any, true, err);
+                    }
+                  });
+              } else {
+                callback(res, true);
+              }
+            } catch (err) {
+              callback(null as any, true, err);
+            }
+            return this.setupAbort(() => {
+              unsubscribed = true;
+            }, abortSignal, () => {
+              unsubscribed = true;
+            });
+          }
+        }
+      }
+    }
+
+    throw new Error(
+      `No stream plugin registered for ${command.constructor.name}`,
+    );
   }
 
   registerStream<C extends Command>(
@@ -147,6 +253,7 @@ export abstract class BaseCommandBus<
     if (asyncHandlers && typeof asyncHandlers.has === "function") {
       if (asyncHandlers.has(name)) return true;
     }
+    if (this.providedCommands.has(name)) return true;
     if (this.plugin?.isAvailable) {
       return this.plugin.isAvailable(name);
     }
@@ -166,6 +273,9 @@ export abstract class BaseCommandBus<
       for (const name of asyncHandlers.keys()) {
         commands.add(name);
       }
+    }
+    for (const name of this.providedCommands) {
+      commands.add(name);
     }
     if (this.plugin?.getAvailableCommands) {
       for (const name of this.plugin.getAvailableCommands()) {
@@ -337,6 +447,10 @@ export abstract class BaseCommandBus<
         asyncHandlers.delete(name);
         removed = true;
       }
+    }
+    if (this.providedCommands.has(name)) {
+      this.providedCommands.delete(name);
+      removed = true;
     }
 
     if (this.plugin?.unregister) {

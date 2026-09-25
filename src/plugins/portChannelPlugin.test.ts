@@ -466,4 +466,91 @@ Deno.test("PortChannelPlugin - waitFor remote command across peers", async () =>
   assertEquals(result, 35);
 });
 
+Deno.test(
+  "PortChannelPlugin - execute remote command resolved via DI provider on worker node",
+  async () => {
+    const nodes = getNodes(2);
+
+    class ExampleCommandHandler {
+      execute(cmd: ExampleCommand): number {
+        return cmd.data * 3;
+      }
+    }
+
+    // Node 1 configures DI provider and registers ExampleCommand without inline handler
+    nodes[1].commandBus.setProvider((cmdType) => {
+      if (cmdType === ExampleCommand) {
+        return new ExampleCommandHandler();
+      }
+    });
+    nodes[1].commandBus.register(ExampleCommand);
+
+    // Node 0 executes ExampleCommand across port channel
+    const result = await nodes[0].commandBus.execute(new ExampleCommand(10));
+    assertEquals(result, 30);
+  },
+);
+
+Deno.test(
+  "PortChannelPlugin - use local handler via DI provider if available",
+  async () => {
+    const portChannelPlugin = new PortChannelPlugin();
+    const fakePort = new FakeMessagePort();
+    portChannelPlugin.addPort(fakePort);
+
+    class LocalHandler {
+      execute(cmd: ExampleCommand): number {
+        return cmd.data + 100;
+      }
+    }
+
+    const commandBus = new AsyncCommandBus({
+      plugin: portChannelPlugin,
+      provider: (cmdType) =>
+        cmdType === ExampleCommand ? new LocalHandler() : undefined,
+    });
+
+    commandBus.register(ExampleCommand);
+
+    const result = await commandBus.execute(new ExampleCommand(25));
+    assertEquals(result, 125);
+  },
+);
+
+Deno.test(
+  "PortChannelPlugin - use local stream via DI provider if available",
+  async () => {
+    const portChannelPlugin = new PortChannelPlugin();
+    const fakePort = new FakeMessagePort();
+    portChannelPlugin.addPort(fakePort);
+
+    class LocalStreamHandler {
+      async *streamAsync(cmd: ExampleCommand) {
+        for (let i = 0; i < cmd.data; i++) {
+          yield i * 2;
+        }
+      }
+    }
+
+    const commandBus = new AsyncCommandBus({
+      plugin: portChannelPlugin,
+      provider: (cmdType) =>
+        cmdType === ExampleCommand ? new LocalStreamHandler() : undefined,
+    });
+
+    commandBus.register(ExampleCommand);
+
+    const results: number[] = [];
+    await new Promise<void>((resolve, reject) => {
+      commandBus.stream(new ExampleCommand(3), (data, done, err) => {
+        if (err) return reject(err);
+        if (!done) results.push(data);
+        if (done) resolve();
+      });
+    });
+
+    assertEquals(results, [0, 2, 4]);
+  },
+);
+
 

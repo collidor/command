@@ -75,10 +75,53 @@ export interface AsyncCommandBusPlugin<
   handler?: AsyncPluginHandler<C, TContext>;
 }
 
+export type CommandHandlerInstance<
+  C extends Command = Command,
+  TContext extends ContextType = ContextType,
+> = {
+  execute?: (
+    command: C,
+    context?: TContext,
+    meta?: Record<string, any>,
+  ) => Promise<C[COMMAND_RETURN]> | C[COMMAND_RETURN];
+  stream?: (
+    command: C,
+    context: TContext,
+    next: (data: C[COMMAND_RETURN], done: boolean, error?: any) => void,
+    meta?: Record<string, any>,
+  ) => (() => void) | Promise<() => void> | void;
+  streamAsync?: (
+    command: C,
+    context?: TContext,
+    meta?: Record<string, any>,
+  ) => AsyncIterable<C[COMMAND_RETURN]>;
+};
+
+export type CommandHandlerFunction<
+  C extends Command = Command,
+  TContext extends ContextType = ContextType,
+> = (
+  command: C,
+  context?: TContext,
+  meta?: Record<string, any>,
+) => Promise<C[COMMAND_RETURN]> | C[COMMAND_RETURN];
+
+export type CommandHandlerProvider<
+  TContext extends ContextType = ContextType,
+> = (
+  commandType: Type<Command>,
+  context?: TContext,
+) =>
+  | CommandHandlerInstance<any, TContext>
+  | CommandHandlerFunction<any, TContext>
+  | undefined
+  | null;
+
 export interface CommandBusOptions<
   TContext extends ContextType,
   TPlugin extends BasePlugin<TContext> | undefined,
 > {
   context?: TContext;
   plugin?: TPlugin;
+  provider?: CommandHandlerProvider<TContext>;
 }

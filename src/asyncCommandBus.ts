@@ -17,6 +17,9 @@ export class AsyncCommandBus<
     ) => AsyncIterableIterator<any>
   > = new Map();
 
+  register(
+    command: Type<Command> | Type<Command>[],
+  ): void;
   register<C extends Command>(
     command: Type<C>,
     handler: (
@@ -24,21 +27,36 @@ export class AsyncCommandBus<
       context: TContext,
       meta?: Record<string, any>,
     ) => Promise<C[COMMAND_RETURN]> | C[COMMAND_RETURN], // ALLOWS ASYNC
-  ) {
-    this.commandConstructor.set(command.name, command);
-    this.handlers.set(command.name, handler);
+  ): void;
+  register<C extends Command>(
+    command: Type<C> | Type<Command>[],
+    handler?: (
+      command: C,
+      context: TContext,
+      meta?: Record<string, any>,
+    ) => Promise<C[COMMAND_RETURN]> | C[COMMAND_RETURN],
+  ): void {
+    const commands = Array.isArray(command) ? command : [command];
+    for (const cmd of commands) {
+      this.commandConstructor.set(cmd.name, cmd);
+      if (handler) {
+        this.handlers.set(cmd.name, handler);
+      } else {
+        this.providedCommands.add(cmd.name);
+      }
 
-    if (this.plugin?.register) {
-      this.plugin.register(command);
+      if (this.plugin?.register) {
+        this.plugin.register(cmd);
+      }
+      this.notifyAvailabilityChange(cmd.name, true);
     }
-    this.notifyAvailabilityChange(command.name, true);
   }
 
   async execute<C extends Command>(
     command: C,
     context?: TContext,
   ): Promise<C[COMMAND_RETURN]> {
-    const handler = this.handlers.get(command.constructor.name);
+    const handler = this.getHandler<C>(command.constructor.name);
     const ctx = context ?? this.context;
 
     if (this.plugin?.handler) {
@@ -85,7 +103,31 @@ export class AsyncCommandBus<
       return;
     }
 
-    // 2. Fallback to converting callback-stream to async-iterator
+    // 2. Check for provided class with streamAsync
+    if (
+      this.providedCommands.has(command.constructor.name) &&
+      this.provider
+    ) {
+      const constructor = this.commandConstructor.get(
+        command.constructor.name,
+      );
+      if (constructor) {
+        const resolved = this.provider(constructor, context ?? this.context);
+        if (resolved && typeof (resolved as any).streamAsync === "function") {
+          for await (
+            const event of (resolved as any).streamAsync(
+              command,
+              context ?? this.context,
+            )
+          ) {
+            yield event;
+          }
+          return;
+        }
+      }
+    }
+
+    // 3. Fallback to converting callback-stream to async-iterator
     const queue: { value: C[COMMAND_RETURN]; done: boolean; error?: any }[] =
       [];
     let resolveNext: ((res: any) => void) | null = null;

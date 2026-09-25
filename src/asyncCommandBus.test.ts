@@ -154,3 +154,81 @@ Deno.test("AsyncCommandBus - Availability & Readiness", async (t) => {
   });
 });
 
+Deno.test("AsyncCommandBus - DI Provider & Single-Point Registration", async (t) => {
+  class AsyncGreetCommand extends Command<string, string> {}
+  class AsyncStreamCommand extends Command<number, number> {}
+
+  await t.step(
+    "should resolve async handler from provider class instance with async .execute()",
+    async () => {
+      class AsyncGreetHandler {
+        constructor(private prefix: string) {}
+        async execute(cmd: AsyncGreetCommand): Promise<string> {
+          await Promise.resolve();
+          return `${this.prefix} ${cmd.data}!`;
+        }
+      }
+
+      const bus = new AsyncCommandBus({
+        provider: (cmdType) =>
+          cmdType === AsyncGreetCommand
+            ? new AsyncGreetHandler("Hello")
+            : undefined,
+      });
+
+      bus.register(AsyncGreetCommand);
+      const res = await bus.execute(new AsyncGreetCommand("AsyncWorld"));
+      assertEquals(res, "Hello AsyncWorld!");
+    },
+  );
+
+  await t.step(
+    "should resolve streamAsync from provider instance with async *streamAsync()",
+    async () => {
+      class AsyncStreamHandler {
+        async *streamAsync(cmd: AsyncStreamCommand) {
+          for (let i = 0; i < cmd.data; i++) {
+            await Promise.resolve();
+            yield i;
+          }
+        }
+      }
+
+      const bus = new AsyncCommandBus({
+        provider: (cmdType) =>
+          cmdType === AsyncStreamCommand ? new AsyncStreamHandler() : undefined,
+      });
+
+      bus.register(AsyncStreamCommand);
+
+      const items: number[] = [];
+      for await (const val of bus.streamAsync(new AsyncStreamCommand(3))) {
+        items.push(val);
+      }
+      assertEquals(items, [0, 1, 2]);
+    },
+  );
+
+  await t.step(
+    "waitFor should work with DI provided commands",
+    async () => {
+      const bus = new AsyncCommandBus({
+        provider: (cmdType) =>
+          cmdType === AsyncGreetCommand
+            ? { execute: (cmd: AsyncGreetCommand) => `Hi ${cmd.data}` }
+            : undefined,
+      });
+
+      let available = false;
+      const promise = bus.waitFor(AsyncGreetCommand).then(() => {
+        available = true;
+      });
+
+      assertEquals(available, false);
+      bus.register(AsyncGreetCommand);
+      await promise;
+      assertEquals(available, true);
+    },
+  );
+});
+

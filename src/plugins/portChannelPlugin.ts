@@ -337,9 +337,9 @@ export class PortChannelPlugin extends PortChannel<any>
   register(command: Type<Command>): void {
     // Accessing handlers from BaseCommandBus (via AsyncCommandBus)
     // Note: Ensure handlers is 'public' in BaseCommandBus
-    const handler = this.commandBus.handlers.get(command.name);
+    const handler = this.commandBus.getHandler(command.name);
 
-    if (!handler) {
+    if (!handler && !this.commandBus.providedCommands.has(command.name)) {
       // It's possible the command is registered elsewhere or not at all locally
       // If we are strictly a "bridge", we might not error here, but for now we keep strict check.
       // However, usually register() is called to expose a LOCAL command to the network.
@@ -368,7 +368,11 @@ export class PortChannelPlugin extends PortChannel<any>
 
         // We can await safely because we are in an async function
         // and we know the handler might return a Promise
-        let result = handler(cmd, this.context, meta);
+        const execHandler = this.commandBus.getHandler(command.name) ?? handler;
+        if (!execHandler) {
+          throw new Error(`No handler registered for ${command.name}`);
+        }
+        let result = execHandler(cmd, this.context, meta);
         if (result instanceof Promise) {
           result = await result;
         }
@@ -406,11 +410,16 @@ export class PortChannelPlugin extends PortChannel<any>
   handler(
     command: Command,
     context: any,
+    handler?: (
+      command: Command,
+      context: any,
+    ) => Promise<Command[COMMAND_RETURN]> | Command[COMMAND_RETURN],
   ): Promise<Command[COMMAND_RETURN]> {
-    // 1. Check Local Sync Handlers
-    if (this.commandBus.handlers.has(command.constructor.name)) {
-      const handler = this.commandBus.handlers.get(command.constructor.name)!;
-      return Promise.resolve(handler(command, context ?? this.context));
+    // 1. Check Local Handlers (inline or provided via DI)
+    const localHandler = handler ??
+      this.commandBus.getHandler(command.constructor.name);
+    if (localHandler) {
+      return Promise.resolve(localHandler(command, context ?? this.context));
     }
 
     // 2. Remote Execution via PortChannel
@@ -689,6 +698,102 @@ export class PortChannelPlugin extends PortChannel<any>
       return () => {
         unsubscribed = true;
       };
+    }
+
+    // Path 2.5: Local Provided Command (DI Provider)
+    if (
+      this.commandBus.providedCommands.has(command.constructor.name) &&
+      this.commandBus.getProvider()
+    ) {
+      const constructor = this.commandBus.commandConstructor.get(
+        command.constructor.name,
+      );
+      if (constructor) {
+        const provider = this.commandBus.getProvider()!;
+        const resolved = provider(constructor, context ?? this.context);
+        if (resolved) {
+          if (typeof (resolved as any).stream === "function") {
+            let unsubscribed = false;
+            const unsubscribe = (resolved as any).stream(
+              command,
+              context ?? this.context,
+              (data: any, done: boolean, error?: any) => {
+                if (unsubscribed) return;
+                next(data, done, error);
+                if (done) unsubscribed = true;
+              },
+            );
+            if (abortSignal) {
+              abortSignal.addEventListener("abort", () => {
+                unsubscribed = true;
+                if (typeof unsubscribe === "function") unsubscribe();
+              });
+            }
+            return () => {
+              unsubscribed = true;
+              if (typeof unsubscribe === "function") unsubscribe();
+            };
+          }
+
+          if (typeof (resolved as any).streamAsync === "function") {
+            let unsubscribed = false;
+            (async () => {
+              try {
+                for await (
+                  const data of (resolved as any).streamAsync(
+                    command,
+                    context ?? this.context,
+                  )
+                ) {
+                  if (unsubscribed) break;
+                  next(data, false);
+                }
+                if (!unsubscribed) next(null, true);
+              } catch (error) {
+                if (!unsubscribed) next(null, true, error);
+              }
+            })();
+
+            if (abortSignal) {
+              abortSignal.addEventListener("abort", () => {
+                unsubscribed = true;
+              });
+            }
+            return () => {
+              unsubscribed = true;
+            };
+          }
+
+          const executeFn = typeof (resolved as any).execute === "function"
+            ? (resolved as any).execute.bind(resolved)
+            : typeof resolved === "function"
+            ? resolved
+            : undefined;
+
+          if (executeFn) {
+            let unsubscribed = false;
+            try {
+              const res = executeFn(command, context ?? this.context);
+              if (res instanceof Promise) {
+                res
+                  .then((result) => {
+                    if (!unsubscribed) next(result, true);
+                  })
+                  .catch((err) => {
+                    if (!unsubscribed) next(null, true, err);
+                  });
+              } else {
+                next(res, true);
+              }
+            } catch (err) {
+              next(null, true, err);
+            }
+            return () => {
+              unsubscribed = true;
+            };
+          }
+        }
+      }
     }
 
     // Path 3: Remote Stream via PortChannel

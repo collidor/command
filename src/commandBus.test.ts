@@ -310,3 +310,200 @@ Deno.test("CommandBus (Sync) - Availability & Readiness", async (t) => {
   });
 });
 
+Deno.test("CommandBus (Sync) - DI Provider & Single-Point Registration", async (t) => {
+  class GreetCommand extends Command<string, string> {}
+  class AddCommand extends Command<{ a: number; b: number }, number> {}
+  class StreamCommand extends Command<number, number> {}
+
+  await t.step(
+    "should resolve handler from provider class instance with .execute()",
+    () => {
+      class GreetHandler {
+        constructor(private prefix: string) {}
+        execute(cmd: GreetCommand): string {
+          return `${this.prefix} ${cmd.data}!`;
+        }
+      }
+
+      const container = new Map<any, any>();
+      container.set(GreetCommand, new GreetHandler("Hello"));
+
+      const bus = new CommandBus({
+        provider: (cmdType) => container.get(cmdType),
+      });
+
+      bus.register(GreetCommand);
+
+      assertEquals(bus.execute(new GreetCommand("World")), "Hello World!");
+    },
+  );
+
+  await t.step("should resolve handler from provider function", () => {
+    const bus = new CommandBus({
+      provider: (cmdType) => {
+        if (cmdType === GreetCommand) {
+          return (cmd: GreetCommand) => `Hi, ${cmd.data}`;
+        }
+      },
+    });
+
+    bus.register(GreetCommand);
+    assertEquals(bus.execute(new GreetCommand("Alice")), "Hi, Alice");
+  });
+
+  await t.step("should support runtime setProvider and getProvider", () => {
+    const bus = new CommandBus();
+    assertEquals(bus.getProvider(), undefined);
+
+    const provider = (cmdType: any) => {
+      if (cmdType === AddCommand) {
+        return {
+          execute: (cmd: AddCommand) => cmd.data.a + cmd.data.b,
+        };
+      }
+    };
+
+    bus.setProvider(provider);
+    assertEquals(bus.getProvider(), provider);
+
+    bus.register(AddCommand);
+    assertEquals(bus.execute(new AddCommand({ a: 10, b: 20 })), 30);
+  });
+
+  await t.step(
+    "should support single-point registration bus.register([CmdA, CmdB])",
+    () => {
+      const bus = new CommandBus({
+        provider: (cmdType) => {
+          if (cmdType === GreetCommand) {
+            return (cmd: GreetCommand) => `Yo ${cmd.data}`;
+          }
+          if (cmdType === AddCommand) {
+            return {
+              execute: (cmd: AddCommand) => cmd.data.a + cmd.data.b,
+            };
+          }
+        },
+      });
+
+      bus.register([GreetCommand, AddCommand]);
+      assertEquals(bus.isAvailable(GreetCommand), true);
+      assertEquals(bus.isAvailable(AddCommand), true);
+      assertEquals(
+        bus.getAvailableCommands().sort(),
+        ["AddCommand", "GreetCommand"].sort(),
+      );
+
+      assertEquals(bus.execute(new GreetCommand("Bob")), "Yo Bob");
+      assertEquals(bus.execute(new AddCommand({ a: 5, b: 5 })), 10);
+    },
+  );
+
+  await t.step("should give precedence to inline handler over provider", () => {
+    const bus = new CommandBus({
+      provider: (cmdType) => {
+        if (cmdType === GreetCommand) return () => "from-provider";
+      },
+    });
+
+    bus.register(GreetCommand, () => "from-inline");
+    assertEquals(bus.execute(new GreetCommand("test")), "from-inline");
+  });
+
+  await t.step(
+    "should throw informative error if provider returns undefined or invalid handler",
+    () => {
+      const bus = new CommandBus({
+        provider: () => undefined,
+      });
+      bus.register(GreetCommand);
+      assertThrows(
+        () => bus.execute(new GreetCommand("test")),
+        Error,
+        "Provider returned no handler for GreetCommand",
+      );
+
+      const busInvalid = new CommandBus({
+        provider: () => ({} as any),
+      });
+      busInvalid.register(GreetCommand);
+      assertThrows(
+        () => busInvalid.execute(new GreetCommand("test")),
+        Error,
+        "Provider did not return a valid handler or execute method for GreetCommand",
+      );
+    },
+  );
+
+  await t.step(
+    "unregister should remove provided commands and update availability",
+    () => {
+      const bus = new CommandBus({
+        provider: () => () => "ok",
+      });
+
+      bus.register(GreetCommand);
+      assertEquals(bus.isAvailable(GreetCommand), true);
+
+      const removed = bus.unregister(GreetCommand);
+      assertEquals(removed, true);
+      assertEquals(bus.isAvailable(GreetCommand), false);
+      assertEquals(bus.getAvailableCommands().includes("GreetCommand"), false);
+    },
+  );
+
+  await t.step(
+    "stream should delegate to provider instance stream() method",
+    () => {
+      class StreamHandler {
+        stream(
+          cmd: StreamCommand,
+          _ctx: any,
+          next: (data: number, done: boolean) => void,
+        ) {
+          for (let i = 0; i < cmd.data; i++) {
+            next(i, i === cmd.data - 1);
+          }
+          return () => {};
+        }
+      }
+
+      const bus = new CommandBus({
+        provider: (cmdType) =>
+          cmdType === StreamCommand ? new StreamHandler() : undefined,
+      });
+      bus.register(StreamCommand);
+
+      const results: number[] = [];
+      bus.stream(new StreamCommand(3), (val) => results.push(val));
+      assertEquals(results, [0, 1, 2]);
+    },
+  );
+
+  await t.step(
+    "stream should fall back to provider instance execute() when stream() is absent",
+    () => {
+      class ExecHandler {
+        execute(cmd: StreamCommand): number {
+          return cmd.data * 10;
+        }
+      }
+
+      const bus = new CommandBus({
+        provider: (cmdType) =>
+          cmdType === StreamCommand ? new ExecHandler() : undefined,
+      });
+      bus.register(StreamCommand);
+
+      let result = 0;
+      let done = false;
+      bus.stream(new StreamCommand(5), (val, isDone) => {
+        result = val;
+        done = isDone;
+      });
+      assertEquals(result, 50);
+      assertEquals(done, true);
+    },
+  );
+});
+
