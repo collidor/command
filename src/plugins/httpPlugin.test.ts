@@ -103,14 +103,9 @@ Deno.test("httpClientPlugin - should set custom headers via function", async () 
   const commandBus = new AsyncCommandBus({ plugin });
   const result = await commandBus.execute(command);
   assertEquals(result, 42);
-  assertEquals(
-    (fetchStub.calls[0]?.args[1]?.headers as Headers).get("X-Test"),
-    "true",
-  );
-  assertEquals(
-    (fetchStub.calls[0]?.args[1]?.headers as Headers).get("Content-Type"),
-    "application/json",
-  );
+  const headers = fetchStub.calls[0].args[1]?.headers as Headers;
+  assertEquals(headers.get("X-Test"), "true");
+  assertEquals(headers.get("Content-Type"), "application/json");
 });
 
 Deno.test("httpClientPlugin - should append the default headers on every request", async () => {
@@ -135,18 +130,10 @@ Deno.test("httpClientPlugin - should append the default headers on every request
   const commandBus = new AsyncCommandBus({ plugin });
   const result = await commandBus.execute(command);
   assertEquals(result, 42);
-  assertEquals(
-    (fetchStub.calls[0]?.args[1]?.headers as Headers).get("X-Test"),
-    "true",
-  );
-  assertEquals(
-    (fetchStub.calls[0]?.args[1]?.headers as Headers).get("Content-Type"),
-    "application/json",
-  );
-  assertEquals(
-    (fetchStub.calls[0]?.args[1]?.headers as Headers).get("userId"),
-    "123",
-  );
+  const headers2 = fetchStub.calls[0].args[1]?.headers as Headers;
+  assertEquals(headers2.get("X-Test"), "true");
+  assertEquals(headers2.get("Content-Type"), "application/json");
+  assertEquals(headers2.get("userId"), "123");
 });
 
 // httpServerCommand tests

@@ -297,6 +297,7 @@ export class CommandHistoryManager<
       try {
         l();
       } catch (e) {
+        // deno-lint-ignore no-console
         console.error("Error in CommandHistoryManager listener:", e);
       }
     });
@@ -312,7 +313,8 @@ class BatchCompositeCommand extends Command<
   }
 }
 
-export const globalCommandHistory = new CommandHistoryManager();
+export const globalCommandHistory: CommandHistoryManager =
+  new CommandHistoryManager();
 
 export function getGlobalCommandHistory(): CommandHistoryManager {
   return globalCommandHistory;

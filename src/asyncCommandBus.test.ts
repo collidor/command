@@ -83,8 +83,8 @@ Deno.test("AsyncCommandBus - Stream Async (Iterators)", async (t) => {
 
   await t.step("should throw if async generator throws", async () => {
     const bus = new AsyncCommandBus();
-    // deno-lint-ignore require-yield
     bus.registerStreamAsync(ExampleCommand, async function* () {
+      if (false as boolean) yield 0;
       throw new Error("Generator error");
     });
 
