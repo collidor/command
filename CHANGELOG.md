@@ -1,3 +1,16 @@
+# [7.2.0](https://github.com/collidor/command/compare/v7.1.1...v7.2.0) (2026-09-26)
+
+
+### Bug Fixes
+
+* **command:** resolve code review standards breaches, spec gaps, and baseline smells ([c968981](https://github.com/collidor/command/commit/c9689813a824838cc42024e456b7b915b95c4a13))
+
+
+### Features
+
+* **command:** add command availability check, readiness hooks, onAvailabilityChange, and waitFor ([6b85aae](https://github.com/collidor/command/commit/6b85aae87067df1b7095370896491ebcc3ea892f))
+* **command:** add generic DI handler provider architecture ([bb07570](https://github.com/collidor/command/commit/bb075700404c629e873c5de0abe97d6c3995b487))
+
 ## [7.1.1](https://github.com/collidor/command/compare/v7.1.0...v7.1.1) (2026-09-24)
 
 
