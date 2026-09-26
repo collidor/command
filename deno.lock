@@ -1,7 +1,7 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@collidor/event@^4.4.0": "4.4.0",
+    "jsr:@collidor/event@^4.5.0": "4.5.0",
     "jsr:@std/assert@*": "1.0.12",
     "jsr:@std/assert@^1.0.10": "1.0.11",
     "jsr:@std/assert@^1.0.11": "1.0.19",
@@ -20,8 +20,8 @@
     "npm:tsup@8.5.0": "8.5.0_typescript@5.8.3_esbuild@0.25.5"
   },
   "jsr": {
-    "@collidor/event@4.4.0": {
-      "integrity": "f2269c2d53c3b5a2b2c8fe662cd30c4aab14e6a638832cafc2f0d02e55481061"
+    "@collidor/event@4.5.0": {
+      "integrity": "7740d0614d4fac4592e93379238be4484bb6596ab86102845ffc45232bda52d5"
     },
     "@std/assert@1.0.11": {
       "integrity": "2461ef3c368fe88bc60e186e7744a93112f16fd110022e113a0849e94d1c83c1",
@@ -864,13 +864,13 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@collidor/event@^4.4.0",
+      "jsr:@collidor/event@^4.5.0",
       "jsr:@std/assert@^1.0.11",
       "jsr:@std/testing@^1.0.9"
     ],
     "packageJson": {
       "dependencies": [
-        "npm:@collidor/event@^4.4.0",
+        "npm:@collidor/event@^4.5.0",
         "npm:@semantic-release/changelog@^6.0.3",
         "npm:@semantic-release/exec@^6.0.3",
         "npm:@semantic-release/git@^10.0.1",

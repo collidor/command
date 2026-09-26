@@ -1,6 +1,5 @@
 import type { Command, COMMAND_RETURN } from "./commandModel.ts";
 import type {
-  AvailabilityCallback,
   AvailabilityChangeOptions,
   BasePlugin,
   CommandBusOptions,
