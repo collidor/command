@@ -1,3 +1,15 @@
+# [7.3.0](https://github.com/collidor/command/compare/v7.2.1...v7.3.0) (2026-10-01)
+
+
+### Bug Fixes
+
+* **deps:** update @collidor/event to ^4.7.0 ([4400126](https://github.com/collidor/command/commit/4400126e29fea09395ecea93274a3131a3181bb3))
+
+
+### Features
+
+* **command:** add createCommand and refactor PortChannelPlugin to use centralized PortChannel ([98f49e4](https://github.com/collidor/command/commit/98f49e4a727ac263ce2ba4635770941135ff00a1))
+
 ## [7.2.1](https://github.com/collidor/command/compare/v7.2.0...v7.2.1) (2026-09-26)
 
 
