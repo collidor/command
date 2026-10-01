@@ -1,4 +1,9 @@
 export { Command, COMMAND_RETURN } from "./commandModel.ts";
+export {
+  createCommand,
+  type CommandArgs,
+  type CommandConstructor,
+} from "./createCommand.ts";
 export { CommandBus } from "./commandBus.ts";
 export {
   CommandHistoryManager,

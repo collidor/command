@@ -28,8 +28,10 @@ npm install @collidor/command
 
 ## Basic Usage
 
+### Using Class Inheritance
+
 ```typescript
-import { CommandBus } from "@collidor/command";
+import { Command, CommandBus } from "@collidor/command";
 
 // 1. Define command
 class CreateUser extends Command<{name: string}, { id: string }> {}
@@ -43,7 +45,32 @@ bus.register(CreateUser, (command, context) => ({
 }));
 
 // 4. Execute (type inferred as { id: string })
-const user = bus.execute(new CreateUser());
+const user = bus.execute(new CreateUser({ name: "Alice" }));
+```
+
+### Using `createCommand` (Bundler / Minification Safe)
+
+When bundling for production, JavaScript minifiers often mangle class names (e.g. `class CreateUser` becomes `class a`). Since the bus, DI provider, and networking plugins (`httpPlugin`, `portChannelPlugin`, `windowCustomEventPlugin`) route commands using their constructor name, `createCommand` provides a type-safe way to define commands with a fixed, unminifiable name:
+
+```typescript
+import { createCommand, CommandBus } from "@collidor/command";
+
+// Define command with explicit types and name: createCommand<PayloadType, ReturnType>("CommandName")
+export const CreateUser = createCommand<{ name: string }, { id: string }>("CreateUser");
+
+// Void payload command
+export const PingCommand = createCommand<void, string>("PingCommand");
+
+const bus = new CommandBus();
+
+bus.register(CreateUser, (command) => ({
+  id: "user_123",
+}));
+
+bus.register(PingCommand, () => "pong");
+
+const user = bus.execute(new CreateUser({ name: "Alice" }));
+const pong = bus.execute(new PingCommand());
 ```
 
 ## Async Stream Methods

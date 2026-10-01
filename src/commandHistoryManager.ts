@@ -114,7 +114,7 @@ export class CommandHistoryManager<
     targetBus?: CommandBus<any>,
   ): void {
     const b = targetBus ?? this.defaultBus;
-    b.register(command, handler);
+    (b as any).register(command, handler);
   }
 
   public execute<C extends Command, I extends Command>(
