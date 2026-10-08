@@ -1,3 +1,11 @@
+## [7.3.1](https://github.com/collidor/command/compare/v7.3.0...v7.3.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* promise guard ([599b482](https://github.com/collidor/command/commit/599b48254c9d3bc725311bf6554ea1a47e26772c))
+* use generic promise detection ([f7fba5c](https://github.com/collidor/command/commit/f7fba5c52f0a0ef4765a876f420f933344281e09))
+
 # [7.3.0](https://github.com/collidor/command/compare/v7.2.1...v7.3.0) (2026-10-01)
 
 
