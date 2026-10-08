@@ -1,3 +1,10 @@
+## [7.3.3](https://github.com/collidor/command/compare/v7.3.2...v7.3.3) (2026-10-08)
+
+
+### Bug Fixes
+
+* report stream errors, fix history undo/redo and plugin listener leaks ([0e54bcd](https://github.com/collidor/command/commit/0e54bcdf3666734f71a5381c9a5a1ce44a871043))
+
 ## [7.3.2](https://github.com/collidor/command/compare/v7.3.1...v7.3.2) (2026-10-08)
 
 
