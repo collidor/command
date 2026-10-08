@@ -32,6 +32,17 @@ export type PortChannelPluginMetadata = {
   dataEvent: DataEvent;
 };
 
+type ActiveStream = {
+  /** Peer that requested the stream. */
+  source: string;
+  /** Consumer asked to stop: release resources and echo the unsubscribe. */
+  stop: () => void;
+  /** Our side is ending the stream (e.g. unregister): send a done frame. */
+  close: () => void;
+  /** Consumer is gone: release resources without sending anything. */
+  abandon: () => void;
+};
+
 export type PortChannelPluginOptions = PortChannelOptions & {
   commandTimeout?: number;
   ackTimeout?: number;
@@ -52,6 +63,9 @@ export class PortChannelPlugin
   /** Per-command teardown of stream bookkeeping (unsubscribe listener, in-flight streams). */
   protected commandCleanups: Map<string, () => void> = new Map();
 
+  /** In-flight streams served by this node, by command name then request id. */
+  protected activeStreams: Map<string, Map<string, ActiveStream>> = new Map();
+
   constructor(options?: PortChannelPluginOptions) {
     super(options);
     if (options?.commandTimeout) {
@@ -61,6 +75,32 @@ export class PortChannelPlugin
       this.ackTimeout = options.ackTimeout;
     } else if (options?.commandTimeout) {
       this.ackTimeout = Math.min(500, options.commandTimeout);
+    }
+
+    // A consumer that disappears (worker killed, port removed, heartbeat
+    // timeout) never sends an unsubscribe. The channel reports it by dropping
+    // the peer's subscription to the command's _Response event, so stop the
+    // streams that peer was consuming. Chain, don't replace, the user's hook.
+    const userOnUnsubscribe = this.options.onUnsubscribe;
+    this.options = {
+      ...this.options,
+      onUnsubscribe: (eventName, port, source) => {
+        userOnUnsubscribe?.(eventName, port, source);
+        this.abandonStreamsOf(eventName, source);
+      },
+    };
+  }
+
+  protected abandonStreamsOf(eventName: string, source: string): void {
+    if (!eventName.endsWith("_Response")) return;
+    const commandName = eventName.slice(0, -"_Response".length);
+    const active = this.activeStreams.get(commandName);
+    if (!active) return;
+    for (const [id, entry] of Array.from(active)) {
+      if (entry.source === source) {
+        active.delete(id);
+        entry.abandon();
+      }
     }
   }
 
@@ -203,11 +243,12 @@ export class PortChannelPlugin
    * (single) unsubscribe listener to them.
    */
   protected createStreamRegistry(commandName: string): {
-    active: Map<string, { stop: () => void; close: () => void }>;
+    active: Map<string, ActiveStream>;
     unsubscribeName: string;
   } {
     const unsubscribeName = this.getUnsubscribeName(commandName);
-    const active = new Map<string, { stop: () => void; close: () => void }>();
+    const active = new Map<string, ActiveStream>();
+    this.activeStreams.set(commandName, active);
 
     const onUnsubscribe = (unsubscribeData: CommandUnsubscribeEvent) => {
       const entry = active.get(unsubscribeData.id);
@@ -220,6 +261,9 @@ export class PortChannelPlugin
 
     this.commandCleanups.set(commandName, () => {
       this.unsubscribe(unsubscribeName, onUnsubscribe as any);
+      if (this.activeStreams.get(commandName) === active) {
+        this.activeStreams.delete(commandName);
+      }
       const entries = Array.from(active.values());
       active.clear();
       // Tell in-flight consumers the stream is over instead of leaving them hanging.
@@ -314,7 +358,12 @@ export class PortChannelPlugin
         }
       };
 
-      active.set(commandData.id, { stop, close });
+      active.set(commandData.id, {
+        source: dataEvent.source,
+        stop,
+        close,
+        abandon: release,
+      });
       void pump();
     };
 
@@ -379,12 +428,14 @@ export class PortChannelPlugin
             unsubscribe();
           };
           active.set(commandData.id, {
+            source: dataEvent.source,
             stop,
             close: () => {
               if (unsubscribed) return;
               stop();
               publishFrame(null, true);
             },
+            abandon: stop,
           });
         }
       } catch (error) {

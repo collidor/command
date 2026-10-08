@@ -27,7 +27,10 @@ function connectPorts(...ports: FakeMessagePort[]) {
   }
 }
 
-function getNodes<const N extends number>(n: N):
+function getNodes<const N extends number>(
+  n: N,
+  pluginOptions?: ConstructorParameters<typeof PortChannelPlugin>[0],
+):
   & Array<{
     port: FakeMessagePort;
     portChannelPlugin: PortChannelPlugin;
@@ -44,7 +47,7 @@ function getNodes<const N extends number>(n: N):
 
   for (let i = 0; i < n; i++) {
     const port = new FakeMessagePort(i + "");
-    const portChannelPlugin = new PortChannelPlugin();
+    const portChannelPlugin = new PortChannelPlugin(pluginOptions);
     portChannelPlugin.addPort(port);
     const commandBus = new AsyncCommandBus({
       plugin: portChannelPlugin,
@@ -777,4 +780,150 @@ Deno.test("PortChannelPlugin - unregister ends an in-flight callback stream with
   await sleep(30);
 
   assert(frames.some((f) => f.done), "consumer never received a done frame");
+});
+
+// --- churn / leak tests -----------------------------------------------------
+
+class ChurnAsyncCommand extends Command<number, number> {}
+class ChurnCallbackCommand extends Command<number, number> {}
+
+type ChurnCounters = { asyncOpen: number; cbOpen: number };
+
+function totalListeners(plugin: PortChannelPlugin): number {
+  let n = 0;
+  for (const cbs of (plugin as any).listeners.values()) n += cbs.length;
+  return n;
+}
+
+function registerChurnHandlers(
+  bus: AsyncCommandBus<any, any>,
+  counters: ChurnCounters,
+) {
+  bus.registerStreamAsync(ChurnAsyncCommand, async function* (cmd) {
+    counters.asyncOpen++;
+    try {
+      for (let i = 0; i < cmd.data; i++) {
+        yield i;
+        await sleep(2);
+      }
+    } finally {
+      counters.asyncOpen--;
+    }
+  });
+  bus.registerStream(ChurnCallbackCommand, (cmd, _ctx, next) => {
+    counters.cbOpen++;
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i < cmd.data) next(i++, false);
+      else next(null as any, true);
+    }, 2);
+    return () => {
+      clearInterval(timer);
+      counters.cbOpen--;
+    };
+  });
+}
+
+Deno.test("PortChannelPlugin - churn: open/cancel/abort/re-register leaves no listeners or open streams", async () => {
+  const nodes = getNodes(4, { bufferTimeout: 20 });
+  const [server, ...clients] = nodes;
+  const counters: ChurnCounters = { asyncOpen: 0, cbOpen: 0 };
+
+  registerChurnHandlers(server.commandBus, counters);
+
+  const serverBaseline = {
+    listeners: totalListeners(server.portChannelPlugin),
+    subscriptions: (server.portChannelPlugin as any).commandSubscriptions.size,
+    cleanups: (server.portChannelPlugin as any).commandCleanups.size,
+  };
+  const clientBaselines = clients.map((c) => totalListeners(c.portChannelPlugin));
+
+  const ROUNDS = 12;
+  let completed = 0;
+
+  for (let round = 0; round < ROUNDS; round++) {
+    const cancels: Array<() => void> = [];
+    const aborts: AbortController[] = [];
+
+    for (const client of clients) {
+      // cancelled by the consumer
+      cancels.push(
+        client.commandBus.stream(new ChurnAsyncCommand(1e9), () => {}),
+        client.commandBus.stream(new ChurnCallbackCommand(1e9), () => {}),
+      );
+      // finishes by itself
+      for (const Cmd of [ChurnAsyncCommand, ChurnCallbackCommand]) {
+        client.commandBus.stream(new Cmd(3), (_d, done) => {
+          if (done) completed++;
+        });
+      }
+      // aborted through a signal
+      const ac = new AbortController();
+      aborts.push(ac);
+      client.commandBus.stream(
+        new ChurnAsyncCommand(1e9),
+        () => {},
+        undefined,
+        ac.signal,
+      );
+    }
+
+    await sleep(15);
+    cancels.forEach((c) => c());
+    aborts.forEach((a) => a.abort());
+
+    // every other round, re-register while the cancelled streams are still winding down
+    if (round % 2 === 0) {
+      server.commandBus.unregister(ChurnAsyncCommand);
+      server.commandBus.unregister(ChurnCallbackCommand);
+      registerChurnHandlers(server.commandBus, counters);
+    }
+    await sleep(10);
+  }
+
+  await sleep(150);
+
+  assertEquals(completed, ROUNDS * clients.length * 2, "finite streams must still complete");
+  assertEquals(counters.asyncOpen, 0, "async generators left open on the server");
+  assertEquals(counters.cbOpen, 0, "callback streams left open on the server");
+
+  assertEquals(totalListeners(server.portChannelPlugin), serverBaseline.listeners);
+  assertEquals(
+    (server.portChannelPlugin as any).commandSubscriptions.size,
+    serverBaseline.subscriptions,
+  );
+  assertEquals(
+    (server.portChannelPlugin as any).commandCleanups.size,
+    serverBaseline.cleanups,
+  );
+
+  clients.forEach((c, i) => {
+    assertEquals(totalListeners(c.portChannelPlugin), clientBaselines[i]);
+    assertEquals((c.portChannelPlugin as any).responseSubscriptions.size, 0);
+  });
+  for (const n of nodes) {
+    assertEquals((n.portChannelPlugin as any).bufferedEvents.size, 0);
+  }
+});
+
+Deno.test("PortChannelPlugin - a server stops streams when the consuming peer disconnects", async () => {
+  const nodes = getNodes(2, { bufferTimeout: 20 });
+  const counters: ChurnCounters = { asyncOpen: 0, cbOpen: 0 };
+  registerChurnHandlers(nodes[0].commandBus, counters);
+
+  nodes[1].commandBus.stream(new ChurnAsyncCommand(1e9), () => {});
+  nodes[1].commandBus.stream(new ChurnCallbackCommand(1e9), () => {});
+  await sleep(20);
+  assertEquals(counters.asyncOpen, 1);
+  assertEquals(counters.cbOpen, 1);
+
+  // The consumer vanishes without sending any unsubscribe.
+  nodes[0].portChannelPlugin.removePort(
+    nodes[0].port,
+    nodes[1].portChannelPlugin.id,
+  );
+  await sleep(60);
+
+  assertEquals(counters.asyncOpen, 0, "async generator kept running for a dead peer");
+  assertEquals(counters.cbOpen, 0, "callback stream kept running for a dead peer");
 });

@@ -32,7 +32,7 @@
     "author": "Alykam Burdzaki <alykam@gmail.com> (https://alykam.com)",
     "license": "MIT",
     "devDependencies": {
-        "@collidor/event": "^4.7.0",
+        "@collidor/event": "^4.7.2",
         "@semantic-release/changelog": "^6.0.3",
         "@semantic-release/exec": "^6.0.3",
         "@semantic-release/git": "^10.0.1",
@@ -43,7 +43,7 @@
         "typescript": "5.9.2"
     },
     "peerDependencies": {
-        "@collidor/event": "^4.7.0"
+        "@collidor/event": "^4.7.2"
     },
     "engines": {
         "node": ">=24.0.0"
