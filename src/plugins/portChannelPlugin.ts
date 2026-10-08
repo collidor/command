@@ -37,8 +37,10 @@ export type PortChannelPluginOptions = PortChannelOptions & {
   ackTimeout?: number;
 };
 
-export class PortChannelPlugin extends PortChannel<any>
-  implements AsyncCommandBusPlugin<Command, any> {
+export class PortChannelPlugin
+  extends PortChannel<any>
+  implements AsyncCommandBusPlugin<Command, any>
+{
   protected commandBus!: AsyncCommandBus<any, any>;
   declare public context: any;
 
@@ -102,11 +104,10 @@ export class PortChannelPlugin extends PortChannel<any>
       try {
         // 1. Ack
         const ackName = this.getAckName(command.name);
-        this.publish(
-          ackName,
-          { id: commandData.id } as CommandAckEvent,
-          { singleConsumer: true, target: dataEvent.source },
-        );
+        this.publish(ackName, { id: commandData.id } as CommandAckEvent, {
+          singleConsumer: true,
+          target: dataEvent.source,
+        });
 
         // 2. Execute
         const cmd = this.getCommandInstance(command.name, commandData.data);
@@ -117,8 +118,8 @@ export class PortChannelPlugin extends PortChannel<any>
           throw new Error(`No handler registered for ${command.name}`);
         }
         let result = execHandler(cmd, this.context, meta);
-        if (result instanceof Promise) {
-          result = await result;
+        if (typeof result?.then === "function") {
+          result = await (result as Promise<any>);
         }
 
         // 3. Respond
@@ -159,17 +160,21 @@ export class PortChannelPlugin extends PortChannel<any>
     ) => Promise<Command[COMMAND_RETURN]> | Command[COMMAND_RETURN],
   ): Promise<Command[COMMAND_RETURN]> {
     // 1. Check Local Handlers (inline or provided via DI)
-    const localHandler = handler ??
-      this.commandBus.getHandler(command.constructor.name);
+    const localHandler =
+      handler ?? this.commandBus.getHandler(command.constructor.name);
     if (localHandler) {
       return Promise.resolve(localHandler(command, context ?? this.context));
     }
 
     // 2. Remote Execution via PortChannel sendRequestWithFailover
-    return this.sendRequestWithFailover(command.constructor.name, command.data, {
-      timeout: this.timeout,
-      ackTimeout: this.ackTimeout,
-    });
+    return this.sendRequestWithFailover(
+      command.constructor.name,
+      command.data,
+      {
+        timeout: this.timeout,
+        ackTimeout: this.ackTimeout,
+      },
+    );
   }
 
   // --- STREAM REGISTRATION (Incoming Requests) ---
