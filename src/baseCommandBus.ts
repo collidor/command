@@ -216,8 +216,8 @@ export abstract class BaseCommandBus<
             let unsubscribed = false;
             try {
               const res = executeFn(command, ctx);
-              if (res instanceof Promise) {
-                res
+              if (typeof res?.then === 'function') {
+                (res as Promise<any>)
                   .then((result) => {
                     if (!unsubscribed) callback(result, true);
                   })
