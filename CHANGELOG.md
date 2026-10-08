@@ -1,3 +1,10 @@
+## [7.3.4](https://github.com/collidor/command/compare/v7.3.3...v7.3.4) (2026-10-08)
+
+
+### Bug Fixes
+
+* **port-channel:** stop streams for disconnected peers ([a5d7c77](https://github.com/collidor/command/commit/a5d7c77b1ec70bca60c3c0ff9f21a20ffb44a8dd))
+
 ## [7.3.3](https://github.com/collidor/command/compare/v7.3.2...v7.3.3) (2026-10-08)
 
 
