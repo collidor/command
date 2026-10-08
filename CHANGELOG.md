@@ -1,3 +1,10 @@
+## [7.3.2](https://github.com/collidor/command/compare/v7.3.1...v7.3.2) (2026-10-08)
+
+
+### Bug Fixes
+
+* promise detection ([5978293](https://github.com/collidor/command/commit/59782936bc98da38857c9514a5ba07c68173dd01))
+
 ## [7.3.1](https://github.com/collidor/command/compare/v7.3.0...v7.3.1) (2026-10-08)
 
 
