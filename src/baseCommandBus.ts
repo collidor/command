@@ -9,6 +9,8 @@ import type {
 } from "./commandBusTypes.ts";
 
 type ContextType = Record<string, any>;
+type StreamCallback = (data: any, done: boolean, error?: any) => void;
+type StreamTeardown = (() => void) | Promise<() => void> | void;
 
 export abstract class BaseCommandBus<
   TContext extends ContextType,
@@ -50,7 +52,6 @@ export abstract class BaseCommandBus<
     _command: Command,
     _callback: (data: any, done: boolean, error?: any) => void,
     _context: TContext,
-    _abortSignal?: AbortSignal,
   ): (() => void) | undefined {
     return undefined;
   }
@@ -133,109 +134,74 @@ export abstract class BaseCommandBus<
     const name = command.constructor.name;
     const ctx = context ?? this.context;
 
+    if (abortSignal?.aborted) return () => {};
+
     // 1. Check Registered Callback Handler
     const handler = this.streamHandlers.get(name);
     if (handler) {
-      let unsubscribed = false;
-      const unsubscribe = handler(
-        command,
-        ctx,
-        (data, done, error) => {
-          if (unsubscribed) return;
-          callback(data, done, error);
-          if (done) unsubscribed = true;
-        },
+      return this.runStream(
+        (next) => handler(command, ctx, next),
+        callback,
+        abortSignal,
       );
-      return this.setupAbort(unsubscribe, abortSignal, () => {
-        unsubscribed = true;
-      });
     }
 
     // 2. Check Subclass Stream Handler (e.g. asyncStreamHandlers in AsyncCommandBus)
-    const subclassStream = this.executeSubclassStream(
-      command,
-      callback,
-      ctx,
-      abortSignal,
-    );
-    if (subclassStream) {
-      return this.setupAbort(subclassStream, abortSignal);
-    }
+    let handledBySubclass = false;
+    const stopSubclass = this.runStream((next) => {
+      const teardown = this.executeSubclassStream(command, next, ctx);
+      handledBySubclass = teardown !== undefined;
+      return teardown;
+    }, callback, abortSignal);
+    if (handledBySubclass) return stopSubclass;
+    stopSubclass();
 
     // 3. Check Provider (Streaming support on provided classes)
     if (this.providedCommands.has(name) && this.provider) {
       const constructor = this.commandConstructor.get(name);
-      if (constructor) {
-        const resolved = this.provider(constructor, ctx);
-        if (resolved) {
-          if (typeof (resolved as any).stream === "function") {
-            let unsubscribed = false;
-            const unsubscribe = (resolved as any).stream(
-              command,
-              ctx,
-              (data: any, done: boolean, error?: any) => {
-                if (unsubscribed) return;
-                callback(data, done, error);
-                if (done) unsubscribed = true;
-              },
-            );
-            return this.setupAbort(unsubscribe, abortSignal, () => {
-              unsubscribed = true;
-            });
-          }
+      const resolved: any = constructor
+        ? this.provider(constructor, ctx)
+        : undefined;
 
-          if (typeof (resolved as any).streamAsync === "function") {
-            let unsubscribed = false;
-            (async () => {
-              try {
-                for await (
-                  const data of (resolved as any).streamAsync(command, ctx)
-                ) {
-                  if (unsubscribed) break;
-                  callback(data, false);
-                }
-                if (!unsubscribed) callback(null as any, true);
-              } catch (error) {
-                if (!unsubscribed) callback(null as any, true, error);
-              }
-            })();
-            return this.setupAbort(() => {
-              unsubscribed = true;
-            }, abortSignal, () => {
-              unsubscribed = true;
-            });
-          }
+      if (resolved) {
+        if (typeof resolved.stream === "function") {
+          return this.runStream(
+            (next) => resolved.stream(command, ctx, next),
+            callback,
+            abortSignal,
+          );
+        }
 
-          const executeFn = typeof (resolved as any).execute === "function"
-            ? (resolved as any).execute.bind(resolved)
-            : typeof resolved === "function"
-            ? resolved
-            : undefined;
+        if (typeof resolved.streamAsync === "function") {
+          return this.runStream(
+            (next) =>
+              this.pumpAsyncIterable(
+                () => resolved.streamAsync(command, ctx),
+                next,
+              ),
+            callback,
+            abortSignal,
+          );
+        }
 
-          if (executeFn) {
-            let unsubscribed = false;
-            try {
-              const res = executeFn(command, ctx);
-              if (typeof res?.then === 'function') {
-                (res as Promise<any>)
-                  .then((result) => {
-                    if (!unsubscribed) callback(result, true);
-                  })
-                  .catch((err) => {
-                    if (!unsubscribed) callback(null as any, true, err);
-                  });
-              } else {
-                callback(res, true);
-              }
-            } catch (err) {
-              callback(null as any, true, err);
+        const executeFn = typeof resolved.execute === "function"
+          ? resolved.execute.bind(resolved)
+          : typeof resolved === "function"
+          ? resolved
+          : undefined;
+
+        if (executeFn) {
+          return this.runStream((next) => {
+            const res = executeFn(command, ctx);
+            if (typeof res?.then === "function") {
+              (res as Promise<any>).then(
+                (result) => next(result, true),
+                (err) => next(null, true, err),
+              );
+            } else {
+              next(res, true);
             }
-            return this.setupAbort(() => {
-              unsubscribed = true;
-            }, abortSignal, () => {
-              unsubscribed = true;
-            });
-          }
+          }, callback, abortSignal);
         }
       }
     }
@@ -253,14 +219,14 @@ export abstract class BaseCommandBus<
     abortSignal?: AbortSignal,
   ): () => void {
     // 1. Check Plugin
-    if (this.plugin?.streamHandler) {
-      const unsubscribe = this.plugin.streamHandler(
-        command,
-        context ?? this.context,
+    const plugin = this.plugin;
+    if (plugin?.streamHandler) {
+      const ctx = context ?? this.context;
+      return this.runStream(
+        (next) => plugin.streamHandler!(command, ctx, next, abortSignal),
         callback,
         abortSignal,
       );
-      return this.setupAbort(unsubscribe, abortSignal);
     }
 
     // 2. Local Stream Execution
@@ -545,8 +511,10 @@ export abstract class BaseCommandBus<
     }
 
     if (this.plugin?.unregister) {
-      this.plugin.unregister(command as any);
+      // Plugins expect the command type when we know it, not a caller-supplied instance.
+      this.plugin.unregister(this.commandConstructor.get(name) ?? name);
     }
+    this.commandConstructor.delete(name);
 
     const stillAvailable = this.isAvailable(name);
     if (!stillAvailable) {
@@ -556,22 +524,137 @@ export abstract class BaseCommandBus<
     return removed;
   }
 
-  // Helper to handle abort logic DRY
-  private setupAbort(
-    unsubscribe: (() => void) | Promise<() => void> | void,
+  /**
+   * Runs a stream producer with a uniform lifecycle:
+   * - the producer may throw, or reject its teardown promise: the failure is
+   *   delivered to `callback` as a final `done` frame instead of escaping;
+   * - once a `done` frame is delivered (or the returned function / the abort
+   *   signal fires) further frames are dropped and the teardown runs once;
+   * - the abort listener is removed as soon as the stream finishes.
+   */
+  private runStream(
+    start: (next: StreamCallback) => StreamTeardown,
+    callback: StreamCallback,
     abortSignal?: AbortSignal,
-    onAbort?: () => void,
   ): () => void {
-    if (unsubscribe && abortSignal) {
-      abortSignal.addEventListener("abort", () => {
-        onAbort?.();
-        Promise.resolve(unsubscribe).then((f) => f && f());
-      });
+    if (abortSignal?.aborted) return () => {};
+
+    let finished = false;
+    let teardown: (() => void) | undefined;
+    let removeAbort: (() => void) | undefined;
+
+    const runTeardown = (fn: () => void) => {
+      try {
+        fn();
+      } catch {
+        // a failing teardown must not break the stream lifecycle
+      }
+    };
+
+    const release = () => {
+      removeAbort?.();
+      removeAbort = undefined;
+      const fn = teardown;
+      teardown = undefined;
+      if (fn) runTeardown(fn);
+    };
+
+    const stop = () => {
+      if (finished) return;
+      finished = true;
+      release();
+    };
+
+    let consumerError: { error: unknown } | undefined;
+
+    const next: StreamCallback = (data, done, error) => {
+      if (finished) return;
+      if (done) finished = true;
+      try {
+        callback(data, done, error);
+      } catch (e) {
+        consumerError = { error: e };
+        throw e;
+      } finally {
+        if (done) release();
+      }
+    };
+
+    // The producer may hand back its teardown after the stream already
+    // finished (synchronous `done`, or an async setup); run it right away then.
+    const attach = (fn: (() => void) | void) => {
+      if (typeof fn !== "function") return;
+      if (finished) {
+        runTeardown(fn);
+      } else {
+        teardown = fn;
+      }
+    };
+
+    let started: StreamTeardown;
+    try {
+      started = start(next);
+    } catch (error) {
+      // Not a producer failure: the stream already completed, or the throw
+      // came from the consumer's own callback. Don't feed it back to it.
+      if (finished || consumerError?.error === error) throw error;
+      next(null, true, error);
+      return () => {};
     }
+
+    if (typeof (started as any)?.then === "function") {
+      (started as Promise<() => void>).then(
+        attach,
+        (error) => next(null, true, error),
+      );
+    } else {
+      attach(started as (() => void) | void);
+    }
+
+    if (!finished && abortSignal) {
+      if (abortSignal.aborted) {
+        stop();
+      } else {
+        const onAbort = () => stop();
+        abortSignal.addEventListener("abort", onAbort, { once: true });
+        removeAbort = () => abortSignal.removeEventListener("abort", onAbort);
+      }
+    }
+
+    return stop;
+  }
+
+  /**
+   * Forwards an async iterable to a stream callback. The returned function
+   * stops the forwarding and closes the iterator.
+   */
+  protected pumpAsyncIterable(
+    source: () => AsyncIterable<any>,
+    next: StreamCallback,
+  ): () => void {
+    let stopped = false;
+    let iterator: AsyncIterator<any> | undefined;
+    (async () => {
+      try {
+        iterator = source()[Symbol.asyncIterator]();
+        while (!stopped) {
+          const result = await iterator.next();
+          if (stopped) return;
+          if (result.done) break;
+          next(result.value, false);
+        }
+        next(null, true);
+      } catch (error) {
+        next(null, true, error);
+      }
+    })();
     return () => {
-      onAbort?.();
-      if (unsubscribe) {
-        Promise.resolve(unsubscribe).then((f) => f && f());
+      if (stopped) return;
+      stopped = true;
+      try {
+        Promise.resolve(iterator?.return?.()).catch(() => {});
+      } catch {
+        // ignore
       }
     };
   }

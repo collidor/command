@@ -596,3 +596,148 @@ Deno.test("CommandBus (Sync) - DI Provider & Single-Point Registration", async (
   );
 });
 
+
+Deno.test("CommandBus (Sync) - stream lifecycle", async (t) => {
+  await t.step("an already aborted signal never starts the stream", () => {
+    const bus = new CommandBus();
+    const handler = spy((_c: any, _x: any, _n: any) => () => {});
+    bus.registerStream(ExampleCommand, handler);
+
+    const cb = spy();
+    bus.stream(new ExampleCommand(1), cb, {}, AbortSignal.abort());
+    assertEquals(handler.calls.length, 0);
+    assertEquals(cb.calls.length, 0);
+  });
+
+  await t.step("a throwing handler reports an error frame instead of throwing", () => {
+    const bus = new CommandBus();
+    bus.registerStream(ExampleCommand, () => {
+      throw new Error("setup failed");
+    });
+
+    const cb = spy();
+    bus.stream(new ExampleCommand(1), cb);
+    assertEquals(cb.calls.length, 1);
+    assertEquals(cb.calls[0].args[1], true);
+    assertEquals((cb.calls[0].args[2] as Error).message, "setup failed");
+  });
+
+  await t.step("a rejected async setup reports an error frame", async () => {
+    const bus = new CommandBus();
+    bus.registerStream(
+      ExampleCommand,
+      (() => Promise.reject(new Error("async setup failed"))) as any,
+    );
+
+    const cb = spy();
+    bus.stream(new ExampleCommand(1), cb);
+    await sleep(5);
+    assertEquals(cb.calls.length, 1);
+    assertEquals(cb.calls[0].args[1], true);
+    assertEquals((cb.calls[0].args[2] as Error).message, "async setup failed");
+  });
+
+  await t.step("teardown runs once when the stream completes by itself", () => {
+    const bus = new CommandBus();
+    const teardown = spy();
+    bus.registerStream(ExampleCommand, (_c, _x, next) => {
+      setTimeout(() => next(1, true), 0);
+      return teardown;
+    });
+
+    return (async () => {
+      const unsubscribe = bus.stream(new ExampleCommand(1), () => {});
+      await sleep(10);
+      assertEquals(teardown.calls.length, 1);
+      unsubscribe();
+      assertEquals(teardown.calls.length, 1);
+    })();
+  });
+
+  await t.step("teardown returned after a synchronous done still runs", () => {
+    const bus = new CommandBus();
+    const teardown = spy();
+    bus.registerStream(ExampleCommand, (_c, _x, next) => {
+      next(1, true);
+      return teardown;
+    });
+    bus.stream(new ExampleCommand(1), () => {});
+    assertEquals(teardown.calls.length, 1);
+  });
+
+  await t.step("abort tears down once and removes its listener", () => {
+    const bus = new CommandBus();
+    const teardown = spy();
+    bus.registerStream(ExampleCommand, () => teardown);
+
+    const ac = new AbortController();
+    let added = 0;
+    let removed = 0;
+    const add = ac.signal.addEventListener.bind(ac.signal);
+    const remove = ac.signal.removeEventListener.bind(ac.signal);
+    ac.signal.addEventListener = ((t: string, ...r: any[]) => {
+      if (t === "abort") added++;
+      return (add as any)(t, ...r);
+    }) as any;
+    ac.signal.removeEventListener = ((t: string, ...r: any[]) => {
+      if (t === "abort") removed++;
+      return (remove as any)(t, ...r);
+    }) as any;
+
+    const unsubscribe = bus.stream(new ExampleCommand(1), () => {}, {}, ac.signal);
+    ac.abort();
+    unsubscribe();
+    assertEquals(teardown.calls.length, 1);
+    assertEquals(added, 1);
+    assertEquals(removed, 1);
+  });
+
+  await t.step("a stream that completes releases the abort listener", () => {
+    const bus = new CommandBus();
+    bus.registerStream(ExampleCommand, (_c, _x, next) => {
+      setTimeout(() => next(1, true), 0);
+      return () => {};
+    });
+
+    const ac = new AbortController();
+    let removed = 0;
+    const remove = ac.signal.removeEventListener.bind(ac.signal);
+    ac.signal.removeEventListener = ((t: string, ...r: any[]) => {
+      if (t === "abort") removed++;
+      return (remove as any)(t, ...r);
+    }) as any;
+
+    return (async () => {
+      bus.stream(new ExampleCommand(1), () => {}, {}, ac.signal);
+      await sleep(10);
+      assertEquals(removed, 1);
+    })();
+  });
+
+  await t.step("a throwing consumer callback is not called a second time (provider execute)", () => {
+    const bus = new CommandBus({
+      provider: () => ({ execute: () => 1 }),
+    });
+    bus.registerStream(ExampleCommand);
+
+    const cb = spy((_d: any, _done: boolean) => {
+      throw new Error("consumer failed");
+    });
+    assertThrows(
+      () => bus.stream(new ExampleCommand(1), cb),
+      Error,
+      "consumer failed",
+    );
+    assertEquals(cb.calls.length, 1);
+  });
+
+  await t.step("unregister passes the command type to the plugin, and forgets the constructor", () => {
+    const unregister = spy();
+    const bus = new CommandBus({ plugin: { unregister } });
+    bus.register(ExampleCommand, (c) => c.data);
+
+    bus.unregister(new ExampleCommand(1));
+    assertEquals(unregister.calls[0].args[0], ExampleCommand);
+    assertEquals(bus.commandConstructor.has("ExampleCommand"), false);
+  });
+});

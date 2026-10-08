@@ -37,32 +37,11 @@ export class AsyncCommandBus<
     command: Command,
     callback: (data: any, done: boolean, error?: any) => void,
     context: TContext,
-    abortSignal?: AbortSignal,
   ): (() => void) | undefined {
     const handler = this.asyncStreamHandlers.get(command.constructor.name);
     if (!handler) return undefined;
 
-    let unsubscribed = false;
-    (async () => {
-      try {
-        for await (const data of handler(command, context)) {
-          if (unsubscribed) break;
-          callback(data, false);
-        }
-        if (!unsubscribed) callback(null, true);
-      } catch (error) {
-        if (!unsubscribed) callback(null, true, error);
-      }
-    })();
-
-    if (abortSignal) {
-      abortSignal.addEventListener("abort", () => {
-        unsubscribed = true;
-      });
-    }
-    return () => {
-      unsubscribed = true;
-    };
+    return this.pumpAsyncIterable(() => handler(command, context), callback);
   }
 
   register(
@@ -196,39 +175,38 @@ export class AsyncCommandBus<
     // 3. Fallback to converting callback-stream to async-iterator
     const queue: { value: C[COMMAND_RETURN]; done: boolean; error?: any }[] =
       [];
-    let resolveNext: ((res: any) => void) | null = null;
-    let finished = false;
+    let resolveNext: (() => void) | null = null;
 
     const unsubscribe = this.stream(
       command,
       (data, done, error) => {
-        const item = { value: data, done, error };
-        if (resolveNext) {
-          resolveNext(item);
-          resolveNext = null;
-        } else {
-          queue.push(item);
-        }
-        if (done) finished = true;
+        queue.push({ value: data, done, error });
+        resolveNext?.();
+        resolveNext = null;
       },
       context,
     );
 
     try {
-      while (!finished || queue.length > 0) {
-        if (queue.length > 0) {
-          const item = queue.shift()!;
-          if (item.error) throw item.error;
-          yield item.value;
-          if (item.done) break;
-        } else {
-          const item = await new Promise<any>((resolve) => {
+      while (true) {
+        if (queue.length === 0) {
+          await new Promise<void>((resolve) => {
             resolveNext = resolve;
           });
-          if (item.error) throw item.error;
-          yield item.value;
-          if (item.done) break;
+          continue;
         }
+        const item = queue.shift()!;
+        if (item.error) throw item.error;
+        // A `done` frame closes the stream; its payload is only a real value
+        // when the producer sent one (`next(value, true)`), not a bare
+        // completion marker (null / undefined).
+        if (item.done) {
+          if (item.value !== null && item.value !== undefined) {
+            yield item.value;
+          }
+          break;
+        }
+        yield item.value;
       }
     } finally {
       unsubscribe();

@@ -258,3 +258,58 @@ Deno.test("AsyncCommandBus - DI Provider & Single-Point Registration", async (t)
   );
 });
 
+
+Deno.test("AsyncCommandBus - streamAsync completion frame", async (t) => {
+  await t.step("does not yield a trailing null for a bare done frame", async () => {
+    const plugin: AsyncCommandBusPlugin = {
+      streamHandler: (_cmd, _ctx, next) => {
+        next(1, false);
+        next(2, false);
+        next(null, true);
+        return () => {};
+      },
+    };
+    const bus = new AsyncCommandBus({ plugin });
+
+    const got: any[] = [];
+    for await (const v of bus.streamAsync(new ExampleCommand(0))) got.push(v);
+    assertEquals(got, [1, 2]);
+  });
+
+  await t.step("still yields the payload of a done frame that carries a value", async () => {
+    const bus = new AsyncCommandBus();
+    bus.registerStream(ExampleCommand, (_c, _x, next) => {
+      next(1, false);
+      next(2, true);
+      return () => {};
+    });
+
+    const got: any[] = [];
+    for await (const v of bus.streamAsync(new ExampleCommand(0))) got.push(v);
+    assertEquals(got, [1, 2]);
+  });
+
+  await t.step("a registerStreamAsync generator is closed when the consumer aborts", async () => {
+    const bus = new AsyncCommandBus();
+    let closed = false;
+    bus.registerStreamAsync(ExampleCommand, async function* () {
+      try {
+        let i = 0;
+        while (true) {
+          yield i++;
+          await new Promise((r) => setTimeout(r, 5));
+        }
+      } finally {
+        closed = true;
+      }
+    });
+
+    const ac = new AbortController();
+    const cb = (_d: any, _done: boolean) => {};
+    bus.stream(new ExampleCommand(0), cb, {}, ac.signal);
+    await new Promise((r) => setTimeout(r, 20));
+    ac.abort();
+    await new Promise((r) => setTimeout(r, 20));
+    assertEquals(closed, true);
+  });
+});

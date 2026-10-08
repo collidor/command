@@ -587,3 +587,194 @@ Deno.test(
 );
 
 
+
+function listenerCount(plugin: PortChannelPlugin, name: string): number {
+  return (plugin as any).listeners.get(name)?.length ?? 0;
+}
+
+Deno.test("PortChannelPlugin - a throwing async stream handler reports an error to the remote caller", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStreamAsync(ExampleCommand, async function* () {
+    yield 1;
+    throw new Error("generator failed");
+  });
+
+  const frames: Array<{ data: any; done: boolean; error?: any }> = [];
+  nodes[1].commandBus.stream(new ExampleCommand(1), (data, done, error) => {
+    frames.push({ data, done, error });
+  });
+
+  await sleep(50);
+
+  assertEquals(frames[0].data, 1);
+  const last = frames[frames.length - 1];
+  assertEquals(last.done, true);
+  assert(last.error !== undefined);
+});
+
+Deno.test("PortChannelPlugin - an async stream handler that throws synchronously reports an error", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStreamAsync(ExampleCommand, (() => {
+    throw new Error("sync failure");
+  }) as any);
+
+  const frames: Array<{ done: boolean; error?: any }> = [];
+  nodes[1].commandBus.stream(new ExampleCommand(1), (_d, done, error) => {
+    frames.push({ done, error });
+  });
+
+  await sleep(50);
+  assertEquals(frames.length, 1);
+  assertEquals(frames[0].done, true);
+  assert(frames[0].error !== undefined);
+});
+
+Deno.test("PortChannelPlugin - a sync stream handler that throws reports an error to the remote caller", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStream(ExampleCommand, () => {
+    throw new Error("stream setup failed");
+  });
+
+  const frames: Array<{ done: boolean; error?: any }> = [];
+  nodes[1].commandBus.stream(new ExampleCommand(1), (_d, done, error) => {
+    frames.push({ done, error });
+  });
+
+  await sleep(50);
+  assertEquals(frames.length, 1);
+  assertEquals(frames[0].done, true);
+  assert(frames[0].error !== undefined);
+});
+
+Deno.test("PortChannelPlugin - stream requests do not accumulate unsubscribe listeners", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStream(ExampleCommand, (cmd, _ctx, next) => {
+    next(cmd.data, true);
+    return () => {};
+  });
+
+  const before = listenerCount(nodes[0].portChannelPlugin, "ExampleCommand_Unsubscribe");
+  for (let i = 0; i < 5; i++) {
+    nodes[1].commandBus.stream(new ExampleCommand(i), () => {});
+  }
+  await sleep(50);
+
+  assertEquals(
+    listenerCount(nodes[0].portChannelPlugin, "ExampleCommand_Unsubscribe"),
+    before,
+  );
+});
+
+Deno.test("PortChannelPlugin - unregister removes async stream subscriptions", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStreamAsync(ExampleCommand, async function* () {
+    yield 1;
+  });
+  const plugin = nodes[0].portChannelPlugin;
+  assertEquals(listenerCount(plugin, "ExampleCommand"), 1);
+  assertEquals(listenerCount(plugin, "ExampleCommand_Unsubscribe"), 1);
+
+  nodes[0].commandBus.unregister(ExampleCommand);
+  await sleep(10);
+
+  assertEquals(listenerCount(plugin, "ExampleCommand"), 0);
+  assertEquals(listenerCount(plugin, "ExampleCommand_Unsubscribe"), 0);
+});
+
+Deno.test("PortChannelPlugin - registering a command twice does not duplicate handling", async () => {
+  const nodes = getNodes(2);
+  const first = spy((c: ExampleCommand) => c.data);
+  const second = spy((c: ExampleCommand) => c.data * 2);
+
+  nodes[0].commandBus.register(ExampleCommand, first);
+  nodes[0].commandBus.register(ExampleCommand, second);
+
+  assertEquals(listenerCount(nodes[0].portChannelPlugin, "ExampleCommand"), 1);
+  assertEquals(await nodes[1].commandBus.execute(new ExampleCommand(2)), 4);
+  assertSpyCalls(first, 0);
+  assertSpyCalls(second, 1);
+});
+
+Deno.test("PortChannelPlugin - unregister with a command instance removes the subscription", () => {
+  const nodes = getNodes(2);
+  nodes[0].commandBus.register(ExampleCommand, (c) => c.data);
+  assertEquals(listenerCount(nodes[0].portChannelPlugin, "ExampleCommand"), 1);
+
+  nodes[0].commandBus.unregister(new ExampleCommand(1));
+  assertEquals(listenerCount(nodes[0].portChannelPlugin, "ExampleCommand"), 0);
+});
+
+Deno.test("PortChannelPlugin - a remote async stream accepts a plain AsyncIterable", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStreamAsync(ExampleCommand, () => ({
+    [Symbol.asyncIterator]() {
+      let i = 0;
+      return {
+        next: () =>
+          Promise.resolve(
+            i < 2 ? { value: i++, done: false } : { value: undefined, done: true },
+          ),
+      };
+    },
+  }) as any);
+
+  const got: number[] = [];
+  let done = false;
+  nodes[1].commandBus.stream(new ExampleCommand(1), (d, isDone) => {
+    if (!isDone) got.push(d);
+    else done = true;
+  });
+
+  await sleep(50);
+  assertEquals(got, [0, 1]);
+  assertEquals(done, true);
+});
+
+Deno.test("PortChannelPlugin - unregister ends an in-flight async stream with a done frame", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStreamAsync(ExampleCommand, async function* () {
+    let i = 0;
+    while (true) {
+      yield i++;
+      await sleep(5);
+    }
+  });
+
+  const frames: Array<{ done: boolean; error?: any }> = [];
+  nodes[1].commandBus.stream(new ExampleCommand(1), (_d, done, error) => {
+    frames.push({ done, error });
+  });
+  await sleep(30);
+
+  nodes[0].commandBus.unregister(ExampleCommand);
+  await sleep(30);
+
+  assert(frames.some((f) => f.done), "consumer never received a done frame");
+});
+
+Deno.test("PortChannelPlugin - unregister ends an in-flight callback stream with a done frame", async () => {
+  const nodes = getNodes(2);
+
+  nodes[0].commandBus.registerStream(ExampleCommand, (_c, _x, next) => {
+    next(1, false);
+    return () => {};
+  });
+
+  const frames: Array<{ done: boolean; error?: any }> = [];
+  nodes[1].commandBus.stream(new ExampleCommand(1), (_d, done, error) => {
+    frames.push({ done, error });
+  });
+  await sleep(30);
+
+  nodes[0].commandBus.unregister(ExampleCommand);
+  await sleep(30);
+
+  assert(frames.some((f) => f.done), "consumer never received a done frame");
+});

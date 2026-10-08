@@ -32,6 +32,17 @@ export interface CommandHistoryManagerOptions<
   maxHistory?: number;
 }
 
+const EXECUTE_OPTION_KEYS = new Set(["bus", "context", "description", "source"]);
+
+/**
+ * An object is treated as options only if every key is a known option key.
+ * A user context that merely happens to contain e.g. `source` stays a context.
+ */
+function isExecuteOptions(value: object): boolean {
+  const keys = Object.keys(value);
+  return keys.length > 0 && keys.every((k) => EXECUTE_OPTION_KEYS.has(k));
+}
+
 export class CommandHistoryManager<
   TContext extends Record<string, any> = Record<string, any>,
 > {
@@ -129,12 +140,7 @@ export class CommandHistoryManager<
     let source: string | undefined;
 
     if (optionsOrContext && typeof optionsOrContext === "object") {
-      if (
-        "bus" in optionsOrContext ||
-        "context" in optionsOrContext ||
-        "description" in optionsOrContext ||
-        "source" in optionsOrContext
-      ) {
+      if (isExecuteOptions(optionsOrContext)) {
         const opts = optionsOrContext as ExecuteCommandOptions<TContext>;
         if (opts.bus) targetBus = opts.bus;
         if (opts.context) ctx = opts.context;
@@ -174,12 +180,15 @@ export class CommandHistoryManager<
   public undo(context?: TContext): CommandHistoryEntry<any> | null {
     if (!this.canUndo) return null;
 
-    const entry = this.undoStack.pop();
+    const entry = this.undoStack[this.undoStack.length - 1];
     if (!entry) return null;
 
     const ctx = context ?? entry.context ?? this.context;
+    // Execute before touching the stacks so a throwing inverse leaves the
+    // history intact and the entry can be retried.
     entry.bus.execute(entry.inverse, ctx);
 
+    this.undoStack.pop();
     this.pushRedo(entry);
     this.notify();
     return entry;
@@ -188,12 +197,13 @@ export class CommandHistoryManager<
   public redo(context?: TContext): CommandHistoryEntry<any> | null {
     if (!this.canRedo) return null;
 
-    const entry = this.redoStack.pop();
+    const entry = this.redoStack[this.redoStack.length - 1];
     if (!entry) return null;
 
     const ctx = context ?? entry.context ?? this.context;
     entry.bus.execute(entry.forward, ctx);
 
+    this.redoStack.pop();
     this.pushUndo(entry);
     this.notify();
     return entry;
@@ -215,17 +225,27 @@ export class CommandHistoryManager<
     const defaultTargetBus = batchEntries[0]?.bus || this.defaultBus;
 
     const compoundForward = new BatchCompositeCommand(
-      batchEntries.map((e) => ({ cmd: e.forward, bus: e.bus })),
+      batchEntries.map((e) => ({ cmd: e.forward, bus: e.bus, context: e.context })),
     );
     const compoundInverse = new BatchCompositeCommand(
-      [...batchEntries].reverse().map((e) => ({ cmd: e.inverse, bus: e.bus })),
+      [...batchEntries].reverse().map((e) => ({
+        cmd: e.inverse,
+        bus: e.bus,
+        context: e.context,
+      })),
     );
 
-    for (const b of this.getAllBuses()) {
+    // Buses used by the batch may not have been registered via registerBus.
+    const buses = new Set<CommandBus<any>>([
+      ...this.getAllBuses(),
+      ...batchEntries.map((e) => e.bus),
+    ]);
+    for (const b of buses) {
       if (!b.handlers.has(BatchCompositeCommand.name)) {
         b.register(BatchCompositeCommand, (cmd: BatchCompositeCommand, ctx: any) => {
           for (const item of cmd.data) {
-            item.bus.execute(item.cmd, ctx);
+            // Each item runs with the context it was originally executed with.
+            item.bus.execute(item.cmd, item.context ?? ctx);
           }
         });
       }
@@ -305,11 +325,10 @@ export class CommandHistoryManager<
   }
 }
 
-class BatchCompositeCommand extends Command<
-  Array<{ cmd: Command; bus: CommandBus<any> }>,
-  void
-> {
-  constructor(items: Array<{ cmd: Command; bus: CommandBus<any> }>) {
+type BatchItem = { cmd: Command; bus: CommandBus<any>; context?: any };
+
+class BatchCompositeCommand extends Command<BatchItem[], void> {
+  constructor(items: BatchItem[]) {
     super(items);
   }
 }
